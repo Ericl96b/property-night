@@ -206,8 +206,8 @@ export function deedInfo(s: State, tile: number): DeedInfo {
       headline: 'Rent depends on the dice',
       rows: [],
       notes: [
-        'If one utility is owned, rent is 4 times the dice roll.',
-        'If both are owned, rent is 10 times the dice roll.',
+        `If one utility is owned, rent is ${(s.board.utilityMultipliers ?? [4, 10])[0]} times the dice roll.`,
+        `If both are owned, rent is ${(s.board.utilityMultipliers ?? [4, 10])[1]} times the dice roll.`,
         `Mortgage value ${money(mortgageValue(s, tile))}`,
       ],
     };

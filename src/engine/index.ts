@@ -6,6 +6,6 @@ export { checkInvariants } from './invariants';
 export { validateOffer, tradeTileBlocker } from './trade';
 export * from './loans';
 export { CLASSIC_RULES, type Rules } from './rules';
-export { CLASSIC_CHANCE, CLASSIC_CHEST, type Card, type CardEffect, type DeckId } from './cards';
+export { CLASSIC_CHANCE, CLASSIC_CHEST, cardText, effectSummary, type Card, type CardEffect, type DeckId } from './cards';
 export * from './queries';
 export * from './types';

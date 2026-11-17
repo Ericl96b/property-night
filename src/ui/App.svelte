@@ -29,6 +29,7 @@
     controller,
     input,
     presets,
+    boards,
     settings,
     onstart,
     onsetting,
@@ -38,8 +39,9 @@
     controller: GameController;
     input: InputManager;
     presets: import('../app/presets').RulesPresets;
+    boards: import('../app/boardPresets').BoardPresets;
     settings: Settings;
-    onstart: (seats: SeatConfig[], randomOrder: boolean, rulesId: string) => void;
+    onstart: (seats: SeatConfig[], randomOrder: boolean, rulesId: string, boardId: string) => void;
     onsetting: (patch: Partial<Settings>) => void;
     onnewgame: () => void;
     onfullscreen: () => void;
@@ -339,7 +341,7 @@
 
 <div class="stage" style="transform: translate({offset.x}px, {offset.y}px) scale({scale})">
   {#if !started || !view || !gs}
-    <Setup {onstart} {input} {pads} {presets} />
+    <Setup {onstart} {input} {pads} {presets} {boards} />
   {:else}
     <PlayerCards players={players(gs)} {cashOverride} {shake} />
     <ContextPanel {gs} {actions} busy={view.busy} {actingName} error={view.error} onaction={act}>

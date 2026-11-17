@@ -16,6 +16,8 @@ import { rollDie, seedRng } from './engine/rng';
 import App from './ui/App.svelte';
 import { openKV } from './storage/db';
 import { RulesPresets } from './app/presets';
+import { BoardPresets, printView } from './app/boardPresets';
+import { CLASSIC_RULES } from './engine';
 
 async function boot(): Promise<void> {
   const root = document.getElementById('app')!;
@@ -46,6 +48,9 @@ async function boot(): Promise<void> {
   const input = new InputManager(undefined, undefined, browserStore);
   const kv = await openKV();
   const presets = new RulesPresets(kv);
+  const boards = new BoardPresets(kv);
+  // The board texture is regenerated only when the printed board changes (never during play).
+  let boardKey = JSON.stringify(printView(CLASSIC_BOARD, CLASSIC_RULES));
 
   const applySettings = () => {
     input.swapNintendo = settings.swapNintendo;
@@ -88,12 +93,23 @@ async function boot(): Promise<void> {
       controller,
       input,
       presets,
+      boards,
       settings,
-      onstart: async (seats: SeatConfig[], randomOrder: boolean, rulesId: string) => {
+      onstart: async (seats: SeatConfig[], randomOrder: boolean, rulesId: string, boardId: string) => {
         const seed = Number(params.get('seed') ?? Math.floor(Math.random() * 2 ** 31));
-        // The game keeps its own copy of the rules (editing a preset never changes a game).
+        // The game keeps its own copies of the rules, board and cards (editing a preset never
+        // changes a game in progress).
         const rules = { ...(await presets.get(rulesId)).rules };
-        startGame({ seats, seed, rules, turnOrder: randomOrder ? 'random' : 'fixed' });
+        const bp = await boards.get(boardId);
+        const board = JSON.parse(JSON.stringify(bp.board));
+        const decks = JSON.parse(JSON.stringify(bp.decks));
+        const view = printView(board, rules);
+        const key = JSON.stringify(view);
+        if (key !== boardKey) {
+          await scene.setBoard(view);
+          boardKey = key;
+        }
+        startGame({ seats, seed, rules, board, decks, turnOrder: randomOrder ? 'random' : 'fixed' });
       },
       onsetting: async (patch: Partial<Settings>) => {
         const qualityChanged = patch.quality !== undefined && patch.quality !== settings.quality;

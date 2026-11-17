@@ -71,7 +71,8 @@ export function rentFor(s: State, tile: number, diceTotal: number, mods: RentMod
   if (t.type === 'utility') {
     if (mods.utilityRollTotal !== undefined) return 10 * mods.utilityRollTotal;
     const n = countOwned(s, owner, 'utility');
-    return (n >= 2 ? 10 : 4) * diceTotal;
+    const [one, both] = s.board.utilityMultipliers ?? [4, 10];
+    return (n >= 2 ? both : one) * diceTotal;
   }
   return 0;
 }

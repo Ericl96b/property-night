@@ -26,7 +26,7 @@ This file is the hand-off log for unattended work. A resumed session reads it fi
 - [x] **M5** Trades with promises (UI; engine support already exists). Done 2026-11-17.
 - [x] **M6** Rules editor + rules presets; every §5 setting wired and tested. Done 2026-11-17.
 - [x] **M7** Bank loans. Done 2026-11-17.
-- [ ] **M8** Board and card editors + board presets (texture regeneration).
+- [ ] **M8** Board and card editors + board presets (texture regeneration). IN PROGRESS: board presets, board/card editors, card {tile} templating, utility multipliers and texture regeneration at game start are committed and build; still to do: unit tests for src/app/boardPresets.ts, a scripted editor→game check (scripts/plans/), DECISIONS entry, docs/m8 screenshots, tick.
 - [ ] **M9** Save slots, autosave, resume, export/import, undo, game log.
 - [ ] **M10** Bots (medium + bank-backed) in the lobby.
 - [ ] **M11** Polish: sounds, stats screen, speed settings, reduce motion, performance pass.

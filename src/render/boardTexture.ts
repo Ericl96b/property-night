@@ -164,7 +164,7 @@ function drawTile(ctx: CanvasRenderingContext2D, board: BoardData, t: Tile, syms
 
   // Price / amount line at the outer edge.
   let price: string | undefined;
-  if (t.type === 'tax') price = `Pay $${t.taxAmount}`;
+  if (t.type === 'tax') price = t.taxLabel ?? `Pay $${t.taxAmount}`;
   else if (t.price !== undefined) price = `$${t.price}`;
   if (price) {
     setFont(ctx, PRICE);

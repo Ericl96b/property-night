@@ -51,8 +51,8 @@
         <div class="rule"></div>
         <div class="notes">{deed.notes[0]}</div>
       {:else}
-        <div class="util">With one utility owned, rent is <b>4×</b> the dice roll.</div>
-        <div class="util">With both utilities owned, rent is <b>10×</b> the dice roll.</div>
+        <div class="util">{deed.notes[0]}</div>
+        <div class="util">{deed.notes[1]}</div>
         <div class="rule"></div>
         <div class="notes">{deed.notes[2]}</div>
       {/if}

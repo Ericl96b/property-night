@@ -10,19 +10,34 @@
   import ActionButton from './ActionButton.svelte';
   import RemapDialog from './RemapDialog.svelte';
   import RulesEditor from './RulesEditor.svelte';
+  import BoardEditor from './BoardEditor.svelte';
   import type { RulesPreset, RulesPresets } from '../../app/presets';
+  import type { BoardPreset, BoardPresets } from '../../app/boardPresets';
 
   let {
     onstart,
     input,
     pads,
     presets,
+    boards,
   }: {
-    onstart: (seats: SeatConfig[], randomOrder: boolean, rulesId: string) => void;
+    onstart: (seats: SeatConfig[], randomOrder: boolean, rulesId: string, boardId: string) => void;
     input: InputManager;
     pads: PadInfo[];
     presets: RulesPresets;
+    boards: BoardPresets;
   } = $props();
+
+  let boardId = $state('classic-board');
+  let boardList = $state<BoardPreset[]>([]);
+  let editingBoard = $state(false);
+  $effect(() => {
+    void editingBoard;
+    void (async () => {
+      boardList = await boards.list();
+      if (!boardList.some((p) => p.id === boardId)) boardId = 'classic-board';
+    })();
+  });
 
   let rulesId = $state('classic');
   let rulesList = $state<RulesPreset[]>([]);
@@ -130,6 +145,12 @@
       </select>
     </label>
     <button class="link" onclick={() => (editingRules = true)}>Edit rules…</button>
+    <label>Board
+      <select bind:value={boardId} aria-label="Board preset">
+        {#each boardList as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+      </select>
+    </label>
+    <button class="link" onclick={() => (editingBoard = true)}>Edit board & cards…</button>
   </div>
 
   <div class="controllers">
@@ -152,8 +173,11 @@
   </div>
 
   {#if problem}<div class="problem">{problem}</div>{/if}
-  <ActionButton label="Start game" glyph="confirm" primary disabled={!!problem} onclick={() => onstart($state.snapshot(seats), randomOrder, rulesId)} />
+  <ActionButton label="Start game" glyph="confirm" primary disabled={!!problem} onclick={() => onstart($state.snapshot(seats), randomOrder, rulesId, boardId)} />
 </div>
+{#if editingBoard}
+  <BoardEditor presets={boards} selectedId={boardId} onselect={(id) => (boardId = id)} onclose={() => (editingBoard = false)} />
+{/if}
 {#if editingRules}
   <RulesEditor {presets} selectedId={rulesId} onselect={(id) => (rulesId = id)} onclose={() => (editingRules = false)} />
 {/if}

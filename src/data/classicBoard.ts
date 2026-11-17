@@ -39,6 +39,8 @@ export interface Tile {
   utility?: UtilityKind;
   tax?: TaxKind;
   taxAmount?: number;
+  /** Printed tax line override (e.g. "Pay 10%"), set from the active rules at game start. */
+  taxLabel?: string;
 }
 
 export interface Group {
@@ -53,6 +55,8 @@ export interface BoardData {
   title: string;
   subtitle: string;
   goSalary: number;
+  /** Utility rent multipliers: one owned, both owned. */
+  utilityMultipliers?: [number, number];
   groups: Record<GroupId, Group>;
   tiles: Tile[];
 }
@@ -101,6 +105,7 @@ export const CLASSIC_BOARD: BoardData = {
   title: 'Property Night',
   subtitle: 'Houses & Hotels · Est. 2026',
   goSalary: 200,
+  utilityMultipliers: [4, 10],
   groups: CLASSIC_GROUPS,
   tiles: [
     simple(0, 'go', 'Go'),

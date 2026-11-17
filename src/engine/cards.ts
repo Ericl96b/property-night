@@ -21,10 +21,43 @@ export interface Card {
 
 export type DeckId = 'chance' | 'chest';
 
+/** Card text with `{tile}` replaced by the target tile's current name (renamed boards stay right). */
+export function cardText(card: Card, tileNames: (i: number) => string): string {
+  return card.effect.kind === 'moveTo' ? card.text.replaceAll('{tile}', tileNames(card.effect.tile)) : card.text;
+}
+
+/** Short description of a card's effect (editor, rules reference). */
+export function effectSummary(e: CardEffect, tileNames: (i: number) => string): string {
+  switch (e.kind) {
+    case 'collect':
+      return `Collect $${e.amount}`;
+    case 'pay':
+      return `Pay $${e.amount}`;
+    case 'collectFromEach':
+      return `Collect $${e.amount} from each player`;
+    case 'payEach':
+      return `Pay each player $${e.amount}`;
+    case 'moveTo':
+      return `Move to ${tileNames(e.tile)}`;
+    case 'nearestRailroad':
+      return 'Nearest railroad, pay double';
+    case 'nearestUtility':
+      return 'Nearest utility, pay 10× dice';
+    case 'back':
+      return `Back ${e.spaces} spaces`;
+    case 'goToJail':
+      return 'Go to jail';
+    case 'getOutOfJail':
+      return 'Get Out of Jail Free';
+    case 'repairs':
+      return `Pay $${e.perHouse}/house, $${e.perHotel}/hotel`;
+  }
+}
+
 export const CLASSIC_CHANCE: Card[] = [
   { text: 'Take the express to GO. Collect your salary.', effect: { kind: 'moveTo', tile: 0 } },
-  { text: 'Head over to Scarlet Square. Collect your salary if you pass GO.', effect: { kind: 'moveTo', tile: 24 } },
-  { text: 'Stroll down to Rose Court. Collect your salary if you pass GO.', effect: { kind: 'moveTo', tile: 11 } },
+  { text: 'Head over to {tile}. Collect your salary if you pass GO.', effect: { kind: 'moveTo', tile: 24 } },
+  { text: 'Stroll down to {tile}. Collect your salary if you pass GO.', effect: { kind: 'moveTo', tile: 11 } },
   { text: 'Walk to the nearest utility. If it is owned, roll the dice and pay the owner ten times the total.', effect: { kind: 'nearestUtility' } },
   { text: 'Catch the nearest train. If the line is owned, pay the owner double the usual fare.', effect: { kind: 'nearestRailroad' } },
   { text: 'Catch the nearest train. If the line is owned, pay the owner double the usual fare.', effect: { kind: 'nearestRailroad' } },
@@ -34,8 +67,8 @@ export const CLASSIC_CHANCE: Card[] = [
   { text: 'Caught red-handed. Go directly to jail without passing GO.', effect: { kind: 'goToJail' } },
   { text: 'Upkeep is due on your buildings: pay $25 per house and $100 per hotel.', effect: { kind: 'repairs', perHouse: 25, perHotel: 100 } },
   { text: 'Parking ticket on the boulevard. Pay $15.', effect: { kind: 'pay', amount: 15 } },
-  { text: 'Ride the North Line. Collect your salary if you pass GO.', effect: { kind: 'moveTo', tile: 5 } },
-  { text: 'Take a walk to Midnight Park.', effect: { kind: 'moveTo', tile: 39 } },
+  { text: 'Ride the {tile}. Collect your salary if you pass GO.', effect: { kind: 'moveTo', tile: 5 } },
+  { text: 'Take a walk to {tile}.', effect: { kind: 'moveTo', tile: 39 } },
   { text: 'You chaired the neighborhood committee. Pay each player $50.', effect: { kind: 'payEach', amount: 50 } },
   { text: 'Your construction bond matures. Collect $150.', effect: { kind: 'collect', amount: 150 } },
 ];

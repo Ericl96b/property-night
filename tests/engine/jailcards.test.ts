@@ -99,11 +99,11 @@ describe('cards', () => {
     const go = chance(/express to GO/);
     expect(go.s.players[0].position).toBe(0);
     expect(go.s.players[0].cash).toBe(1700);
-    const rose = chance(/Rose Court/);
+    const rose = chance(/Stroll down/);
     expect(rose.s.players[0].position).toBe(11);
     expect(rose.s.players[0].cash).toBe(1500);
     expect(rose.s.phase).toBe('buy');
-    const north = chance(/North Line/);
+    const north = chance(/Ride the/);
     expect(north.s.players[0].position).toBe(5);
     expect(north.s.players[0].cash).toBe(1700); // 7 → 5 wraps past GO
   });

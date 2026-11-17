@@ -1,6 +1,6 @@
 // apply(state, action) → { state, events } (SPEC §12). Pure and deterministic: the input state
 // is never mutated, all randomness comes from the seeded RNG stored in the state.
-import type { DeckId } from './cards';
+import { cardText, type DeckId } from './cards';
 import { nextInt, rollDie } from './rng';
 import {
   buildBlocker,
@@ -201,8 +201,9 @@ function drawCard(c: Ctx, seat: number, deck: DeckId): void {
   if (!order.length) return;
   const index = order.shift()!;
   const card = s.decks[deck][index];
-  c.ev.push({ type: 'cardDrawn', seat, deck, index, text: card.text });
-  log(c, seat, `${name(c, seat)} drew: ${card.text}`);
+  const text = cardText(card, (i) => tileName(c, i));
+  c.ev.push({ type: 'cardDrawn', seat, deck, index, text });
+  log(c, seat, `${name(c, seat)} drew: ${text}`);
   const e = card.effect;
   if (e.kind === 'getOutOfJail') {
     s.players[seat].gojf.push(deck);
