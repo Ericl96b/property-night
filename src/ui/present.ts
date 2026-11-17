@@ -217,6 +217,8 @@ export interface PlayerSummary {
   hotels: number;
   active: boolean;
   kind: string;
+  /** Rent-free promises involving this seat, with turns remaining. */
+  promises: string[];
 }
 
 export function players(s: State): PlayerSummary[] {
@@ -237,6 +239,9 @@ export function players(s: State): PlayerSummary[] {
       hotels: b.hotels,
       active: s.turn.seat === i,
       kind: seat.kind,
+      promises: s.promises
+        .filter((pr) => pr.from === i || pr.to === i)
+        .map((pr) => `${pr.to === i ? 'Rent-free' : 'Promised'} on ${s.board.tiles[pr.tileId].name} (${pr.turnsLeft})`),
     };
   });
 }

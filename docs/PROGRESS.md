@@ -23,7 +23,7 @@ This file is the hand-off log for unattended work. A resumed session reads it fi
 - [x] **M2** Engine → director → scene: roll, move, buy, rent, cards, jail, end turn, basic overlay panels (mouse/keyboard). Done 2026-11-17.
 - [x] **M3** Auctions, building, mortgages, raise-money flow, bankruptcy, forfeit, big-payment moment. Done 2026-11-17.
 - [x] **M4** Controller layer: assignment screen, DS4Windows/Switch Pro mapping, per-seat ownership, simultaneous auction input. Done 2026-11-17 (verified with simulated pads; physical DS4/Switch check pending on the TV PC).
-- [ ] **M5** Trades with promises (UI; engine support already exists).
+- [x] **M5** Trades with promises (UI; engine support already exists). Done 2026-11-17.
 - [ ] **M6** Rules editor + rules presets; every §5 setting wired and tested.
 - [ ] **M7** Bank loans.
 - [ ] **M8** Board and card editors + board presets (texture regeneration).

@@ -95,3 +95,11 @@ Where SPEC.md is silent, the decision taken is recorded here (SPEC §0).
 - **Navigation:** D-pad / left stick (and arrow keys) move focus spatially within the topmost panel; Confirm presses the focused control; otherwise Confirm runs the main action. Shift + arrows nudge the camera from the keyboard; the right stick nudges from a pad.
 - **Opening bid** is the chosen increment (at least the minimum): +$50 opens at $50.
 - **Two identical pads** (same id string) are told apart by connection order (`#1`, `#2`).
+
+## Milestone 5 — trades with promises (2026-11-17)
+
+- **Trade screen:** proposed on your own turn (Trade button / top face) with any other player in the game (not bank-backed bots). Two columns, one per side: deeds (deeds in a set with buildings are greyed out with the reason), cash in ±$10/±$50 steps (capped at that player's cash), and jail cards when held. Validation errors from the engine show inline and disable Propose.
+- **Promises:** rent-free only (the generic `Promise` model is in the engine). Either side can promise; the property list is what that player will own after the trade. Turns 1–99. Badges show on the tile (ribbon decal) and in both player cards with the turns remaining.
+- **Responding:** a human receiver sees "You get / You give" with Accept (Confirm), Counter (Trade button) and Reject (Back); a counter opens the same screen with the sides swapped and becomes the live offer the original proposer must answer. When the receiver is a bot, the proposer sees "Waiting for …" and can withdraw. Bots never counter; they accept only clearly favorable offers.
+- **Bots proposing to humans:** a bot's set-completing offer appears as a normal offer to the human receiver.
+- **Overlay state is not deep-reactive:** the game view uses `$state.raw` (the engine replaces state wholesale), which also avoids proxy cloning issues.

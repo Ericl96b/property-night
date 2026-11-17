@@ -9,6 +9,9 @@
   import { glyphFamily, type InputManager, type PadInfo } from '../input/manager';
   import { moveFocus, type Dir } from './focus';
   import LogPanel from './components/LogPanel.svelte';
+  import TradePanel from './components/TradePanel.svelte';
+  import { counterOf, partners } from './trade';
+  import type { TradeOffer } from '../engine';
   import PlayerCards from './components/PlayerCards.svelte';
   import ContextPanel from './components/ContextPanel.svelte';
   import DrawnCard from './components/DrawnCard.svelte';
@@ -39,7 +42,8 @@
     onfullscreen: () => void;
   } = $props();
 
-  let view = $state<GameView | null>(null);
+  // Raw: the game state is replaced wholesale, never mutated, so no deep proxy is needed.
+  let view = $state.raw<GameView | null>(null);
   let started = $state(false);
   let scale = $state(1);
   let offset = $state({ x: 0, y: 0 });
@@ -53,6 +57,7 @@
   let logOpen = $state(false);
   let waitingSeat = $state<number | null>(null);
   let navFocus = false;
+  let compose = $state<{ seat: number; initial: TradeOffer | null; counter: boolean } | null>(null);
   const glyphCtx = $state({ family: 'playstation' as 'playstation' | 'nintendo', swap: false });
   setContext('glyphs', glyphCtx);
 
@@ -111,6 +116,25 @@
   const debtSeat = $derived(gs?.phase === 'debt' && gs.seats[gs.debts[0].from].kind === 'human' ? gs.debts[0].from : null);
   const manageable = $derived(actor !== null && actions.some((a) => ['build', 'sell', 'mortgage', 'unmortgage'].includes(a.type)));
   const panelSeat = $derived(debtSeat ?? manageSeat);
+  const canPropose = $derived(
+    !!gs &&
+      (gs.phase === 'preRoll' || gs.phase === 'postRoll') &&
+      gs.rules.tradingAllowed &&
+      gs.seats[gs.turn.seat].kind === 'human' &&
+      partners(gs, gs.turn.seat).length > 0,
+  );
+
+  function openTrade(seat: number) {
+    if (!gs) return;
+    if (gs.phase === 'trade' && gs.trade!.to === seat) compose = { seat, initial: counterOf(gs.trade!), counter: true };
+    else if (canPropose && gs.turn.seat === seat) compose = { seat, initial: null, counter: false };
+  }
+
+  function submitTrade(o: TradeOffer) {
+    if (!compose) return;
+    const err = compose.counter ? controller.dispatch({ type: 'counterTrade', seat: compose.seat, offer: o }) : controller.dispatch({ type: 'proposeTrade', seat: compose.seat, offer: o });
+    if (!err) compose = null;
+  }
 
   $effect(() => {
     // Prompts use the acting controller's glyphs (SPEC §4).
@@ -146,7 +170,7 @@
     return amt <= gs!.players[seat].cash ? amt : null;
   }
 
-  const PANELS = ['.remap', '.pause', '.padlost', '.logp', '.manage', '.auction', '.setup', '.context', '.banner'];
+  const PANELS = ['.remap', '.pause', '.padlost', '.logp', '.trade', '.manage', '.auction', '.setup', '.context', '.banner'];
   function topPanel(): Element | null {
     const stage = document.querySelector('.stage');
     if (!stage) return null;
@@ -265,6 +289,23 @@
       }
       return true;
     }
+    if (compose) {
+      if (i === 'back') compose = null;
+      return true;
+    }
+    if (gs.phase === 'trade') {
+      const t = gs.trade!;
+      if (seat === t.to && gs.seats[seat].kind === 'human') {
+        if (i === 'confirm') act({ type: 'acceptTrade', seat });
+        else if (i === 'back') act({ type: 'rejectTrade', seat });
+        else if (i === 'trade') openTrade(seat);
+      } else if (seat === t.from && i === 'back') act({ type: 'cancelTrade', seat });
+      return true;
+    }
+    if (i === 'trade') {
+      openTrade(seat);
+      return true;
+    }
     const seatActions = controller.actionsFor(seat);
     if (i === 'manage') {
       if (seatActions.some((a) => ['build', 'sell', 'mortgage', 'unmortgage'].includes(a.type)) && gs.phase !== 'debt') manageSeat = seat;
@@ -298,6 +339,9 @@
         {#if manageable && gs.phase !== 'debt'}
           <ActionButton label="Manage properties" glyph="manage" disabled={view!.busy} onclick={openManage} />
         {/if}
+        {#if canPropose && actor === gs.turn.seat}
+          <ActionButton label="Trade" glyph="trade" disabled={view!.busy} onclick={() => openTrade(gs.turn.seat)} />
+        {/if}
       {/snippet}
     </ContextPanel>
     {#if gs.phase === 'auction' && !view.busy}
@@ -311,6 +355,18 @@
         onpass={(seat) => act({ type: 'pass', seat })}
         oninc={(seat, k) => (incIndex = { ...incIndex, [seat]: k })}
       />
+    {/if}
+    {#if compose && !view.busy}
+      <TradePanel {gs} mode="compose" seat={compose.seat} initial={compose.initial} counter={compose.counter} onsubmit={submitTrade} oncancel={() => (compose = null)} />
+    {:else if gs.phase === 'trade' && !view.busy}
+      {#if gs.seats[gs.trade!.to].kind === 'human'}
+        <TradePanel {gs} mode="respond" seat={gs.trade!.to}
+          onaccept={() => act({ type: 'acceptTrade', seat: gs.trade!.to })}
+          onreject={() => act({ type: 'rejectTrade', seat: gs.trade!.to })}
+          oncounter={() => openTrade(gs.trade!.to)} />
+      {:else}
+        <TradePanel {gs} mode="waiting" seat={gs.trade!.from} oncancel={() => act({ type: 'cancelTrade', seat: gs.trade!.from })} />
+      {/if}
     {/if}
     {#if panelSeat !== null && !view.busy}
       <ManagePanel {gs} seat={panelSeat} busy={view.busy} onaction={act} onclose={() => (manageSeat = null)} />
