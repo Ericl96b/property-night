@@ -7,7 +7,8 @@ import { Director } from './director/director';
 import { GameController } from './app/controller';
 import { loadSettings, saveSettings, type Settings } from './app/settings';
 import { renderPortraits } from './render/portraits';
-import { startInput, type Intent } from './input/keys';
+import { startKeyboard, type Intent } from './input/keys';
+import { InputManager, browserStore } from './input/manager';
 import type { QualitySetting } from './render/quality';
 import type { Speed } from './director/queue';
 import type { NewGameConfig, SeatConfig, State } from './engine';
@@ -40,7 +41,10 @@ async function boot(): Promise<void> {
   director.settings = () => settings;
   controller = new GameController(director);
 
+  const input = new InputManager(undefined, undefined, browserStore);
+
   const applySettings = () => {
+    input.swapNintendo = settings.swapNintendo;
     scene.setSpeed(settings.speed);
     controller.speed = settings.speed;
     scene.camera.settings.rotation = settings.boardRotation;
@@ -63,6 +67,9 @@ async function boot(): Promise<void> {
   const startGame = (cfg: NewGameConfig) => {
     renderPortraits(cfg.seats.map((s) => ({ token: s.token ?? 'teacup', color: s.color ?? '#7B3FE4' })));
     controller.start(cfg);
+    // Seats are shuffled into turn order: bind each controller to its seat's final index.
+    input.clearBindings();
+    controller.state.seats.forEach((s, i) => s.controllerId && input.bind(s.controllerId, i));
     scene.camera.toSide(controller.state.seats[controller.state.turn.seat].boardSide, true);
     scene.renderer.requestRender();
   };
@@ -75,6 +82,7 @@ async function boot(): Promise<void> {
     target: overlay,
     props: {
       controller,
+      input,
       settings,
       onstart: (seats: SeatConfig[], randomOrder: boolean) => {
         const seed = Number(params.get('seed') ?? Math.floor(Math.random() * 2 ** 31));
@@ -88,17 +96,18 @@ async function boot(): Promise<void> {
         if (qualityChanged) await scene.setQuality(settings.quality);
       },
       onnewgame: () => {
+        input.clearBindings();
         controller.reset();
         scene.tokens.clear();
         scene.renderer.requestRender();
       },
       onfullscreen: toggleFullscreen,
     },
-  }) as { intent: (i: Intent) => boolean };
+  }) as { intent: (i: Intent, seat?: number | null) => boolean; padLost: (seat: number) => void; padBack: (seat: number) => void };
 
-  startInput({
+  startKeyboard({
     intent: (i) => {
-      if (app.intent(i)) return;
+      if (app.intent(i, null)) return;
       if (i === 'fullscreen') toggleFullscreen();
     },
     nudge: (x, y) => {
@@ -106,6 +115,28 @@ async function boot(): Promise<void> {
       scene.renderer.wake();
     },
   });
+
+  // Gamepads: poll every frame on a light loop (no rendering); intents carry the device's seat.
+  input.onIntent = (e) => {
+    // Unbound pads only act on the setup screen (joining) — never in a running game.
+    if (controller.state && e.seat === null) return;
+    app.intent(e.intent, e.seat);
+  };
+  input.onNudge = (x, y) => {
+    scene.camera.setNudge(x, y);
+    scene.renderer.wake();
+  };
+  input.onDisconnect = (_id, seat) => {
+    if (controller.state && seat !== null) app.padLost(seat);
+  };
+  input.onReconnect = (_id, seat) => {
+    if (seat !== null) app.padBack(seat);
+  };
+  const pollPads = () => {
+    input.poll();
+    requestAnimationFrame(pollPads);
+  };
+  requestAnimationFrame(pollPads);
 
   // Review helper: ?auto=human,bot,bank starts a game immediately (fixed turn order).
   const auto = params.get('auto');
@@ -134,7 +165,7 @@ async function boot(): Promise<void> {
     f(s);
     controller.load(s);
   };
-  (window as unknown as { __pn: unknown }).__pn = { scene, controller, director, settings, forceDice, patchState };
+  (window as unknown as { __pn: unknown }).__pn = { scene, controller, director, settings, forceDice, patchState, input, app };
   scene.renderer.requestRender();
   setTimeout(() => splash.classList.add('gone'), 50);
   setTimeout(() => splash.remove(), 700);

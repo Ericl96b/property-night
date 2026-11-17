@@ -32,7 +32,7 @@ export function bidOptions(s: State, seat: number): number[] {
   const a = s.auction;
   if (!a || !a.active.includes(seat)) return [];
   const cash = s.players[seat].cash;
-  const base = a.highBidder === null ? a.minBid - 1 : a.highBid;
+  const base = a.highBidder === null ? 0 : a.highBid; // opening bid = the increment (at least the minimum)
   const amounts = new Set<number>();
   for (const inc of BID_INCREMENTS) {
     const amt = Math.max(a.minBid, base + inc);

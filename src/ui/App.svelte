@@ -1,10 +1,14 @@
 <script lang="ts">
   // Overlay root: fixed 1920 × 1080 logical stage, scaled uniformly (SPEC §10.8).
-  import { onMount } from 'svelte';
+  import { onMount, setContext } from 'svelte';
   import { BID_INCREMENTS, type Action, type SeatConfig } from '../engine';
   import type { GameController, GameView } from '../app/controller';
   import type { Settings } from '../app/settings';
   import type { Intent } from '../input/keys';
+  import { decide } from '../app/ownership';
+  import { glyphFamily, type InputManager, type PadInfo } from '../input/manager';
+  import { moveFocus, type Dir } from './focus';
+  import LogPanel from './components/LogPanel.svelte';
   import PlayerCards from './components/PlayerCards.svelte';
   import ContextPanel from './components/ContextPanel.svelte';
   import DrawnCard from './components/DrawnCard.svelte';
@@ -19,6 +23,7 @@
 
   let {
     controller,
+    input,
     settings,
     onstart,
     onsetting,
@@ -26,6 +31,7 @@
     onfullscreen,
   }: {
     controller: GameController;
+    input: InputManager;
     settings: Settings;
     onstart: (seats: SeatConfig[], randomOrder: boolean) => void;
     onsetting: (patch: Partial<Settings>) => void;
@@ -43,8 +49,16 @@
   let cashOverride = $state<number[] | null>(null);
   let shake = $state<number | null>(null);
   let lastMoment: unknown = null;
+  let pads = $state<PadInfo[]>([]);
+  let logOpen = $state(false);
+  let waitingSeat = $state<number | null>(null);
+  let navFocus = false;
+  const glyphCtx = $state({ family: 'playstation' as 'playstation' | 'nintendo', swap: false });
+  setContext('glyphs', glyphCtx);
 
   onMount(() => {
+    input.onPadsChanged = () => (pads = [...input.pads.values()]);
+    pads = [...input.pads.values()];
     const unsub = controller.subscribe((v) => {
       view = v;
       started = !!v.state;
@@ -99,6 +113,14 @@
   const panelSeat = $derived(debtSeat ?? manageSeat);
 
   $effect(() => {
+    // Prompts use the acting controller's glyphs (SPEC §4).
+    const dev = actor !== null ? input.deviceForSeat(actor) : null;
+    glyphCtx.family = dev ? glyphFamily(dev.kind) : 'playstation';
+    glyphCtx.swap = settings.swapNintendo;
+    void pads;
+  });
+
+  $effect(() => {
     // Close Manage when it no longer applies (turn moved on, phase changed).
     if (manageSeat !== null && gs && !['preRoll', 'buy', 'postRoll'].includes(gs.phase)) manageSeat = null;
   });
@@ -116,27 +138,90 @@
     controller.setPaused(p);
   }
 
-  function auctionKeyboardSeat(): number | null {
-    return auctionHumans.find((i) => gs!.auction!.highBidder !== i) ?? auctionHumans[0] ?? null;
-  }
-
   function bidAmount(seat: number): number | null {
     const a = gs!.auction!;
     const inc = BID_INCREMENTS[incIndex[seat] ?? 1];
-    const base = a.highBidder === null ? a.minBid - inc : a.highBid;
+    const base = a.highBidder === null ? 0 : a.highBid; // opening bid = the increment (at least the minimum)
     const amt = Math.max(a.minBid, base + inc);
     return amt <= gs!.players[seat].cash ? amt : null;
   }
 
-  /** Keyboard / controller intents for the overlay. Returns true when handled. */
-  export function intent(i: Intent): boolean {
-    if (!view || !started || !gs) return false;
+  const PANELS = ['.remap', '.pause', '.padlost', '.logp', '.manage', '.auction', '.setup', '.context', '.banner'];
+  function topPanel(): Element | null {
+    const stage = document.querySelector('.stage');
+    if (!stage) return null;
+    for (const sel of PANELS) {
+      const el = stage.querySelector(sel);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  /** D-pad / arrows move focus; Confirm then clicks the focused control. */
+  function navigate(i: Intent): boolean {
+    const dir = ({ navUp: 'up', navDown: 'down', navLeft: 'left', navRight: 'right' } as Record<string, Dir>)[i];
+    if (!dir) return false;
+    const panel = topPanel();
+    if (panel && moveFocus(panel, dir)) navFocus = true;
+    return true;
+  }
+
+  function clickFocused(): boolean {
+    const el = document.activeElement as HTMLElement | null;
+    const panel = topPanel();
+    if (!navFocus || !el || !panel || !panel.contains(el) || !(el instanceof HTMLButtonElement) || el.disabled) return false;
+    el.click();
+    return true;
+  }
+
+  /** A bound controller for a human seat disconnected: pause until it returns. */
+  export function padLost(seat: number) {
+    if (!gs || gs.phase === 'gameOver' || gs.players[seat]?.bankrupt) return;
+    waitingSeat = seat;
+    controller.setPaused(true);
+  }
+
+  export function padBack(seat: number) {
+    if (waitingSeat === seat) {
+      waitingSeat = null;
+      controller.setPaused(paused);
+    }
+  }
+
+  /**
+   * Keyboard / controller intents. `deviceSeat` is the seat the controller is bound to
+   * (null for keyboard and mouse, which always work as a fallback). Returns true when handled.
+   */
+  export function intent(i: Intent, deviceSeat: number | null = null): boolean {
+    if (!started || !view || !gs) {
+      // Setup screen: navigation and Confirm on the focused control.
+      if (navigate(i)) return true;
+      if (i === 'confirm') return clickFocused();
+      return false;
+    }
+    if (waitingSeat !== null) {
+      if (deviceSeat === null && (i === 'confirm' || i === 'back')) {
+        waitingSeat = null;
+        controller.setPaused(paused);
+      }
+      return true;
+    }
     if (i === 'pause') {
       setPaused(!paused);
       return true;
     }
     if (paused) {
+      if (navigate(i)) return true;
+      if (i === 'confirm') return clickFocused();
       if (i === 'back') setPaused(false);
+      return true;
+    }
+    if (i === 'log') {
+      logOpen = !logOpen;
+      return true;
+    }
+    if (logOpen) {
+      if (i === 'back') logOpen = false;
       return true;
     }
     if (view.busy || view.card || view.moment) {
@@ -146,9 +231,17 @@
       }
       return false;
     }
+    const d = decide(gs, deviceSeat, i);
+    if (!d.allowed || d.seat === null) return true; // other players' controllers are read-only here
+    const seat = d.seat;
+    if (navigate(i)) return true;
+    if (i === 'confirm' && clickFocused()) {
+      navFocus = false;
+      return true;
+    }
+    navFocus = false;
     if (gs.phase === 'auction') {
-      const seat = auctionKeyboardSeat();
-      if (seat === null) return false;
+      if (gs.seats[seat].kind !== 'human') return true;
       if (i === 'cycleLeft' || i === 'cycleRight') {
         const cur = incIndex[seat] ?? 1;
         incIndex = { ...incIndex, [seat]: (cur + (i === 'cycleRight' ? 1 : BID_INCREMENTS.length - 1)) % BID_INCREMENTS.length };
@@ -163,30 +256,33 @@
         if (gs.auction!.highBidder !== seat) act({ type: 'pass', seat });
         return true;
       }
-      return false;
+      return true;
     }
     if (manageSeat !== null) {
       if (i === 'back' || i === 'manage') {
         manageSeat = null;
         return true;
       }
-      return false;
-    }
-    if (i === 'manage') {
-      openManage();
       return true;
     }
-    const buttons = primaryButtons(gs, actions);
+    const seatActions = controller.actionsFor(seat);
+    if (i === 'manage') {
+      if (seatActions.some((a) => ['build', 'sell', 'mortgage', 'unmortgage'].includes(a.type)) && gs.phase !== 'debt') manageSeat = seat;
+      return true;
+    }
+    if (gs.phase === 'gameOver') {
+      if (i === 'confirm') onnewgame();
+      return true;
+    }
+    const buttons = primaryButtons(gs, seatActions);
     if (i === 'confirm' && buttons[0]) {
       act(buttons[0].action);
       return true;
     }
     if (i === 'back') {
       const b = buttons.find((x) => x.glyph === 'back');
-      if (b) {
-        act(b.action);
-        return true;
-      }
+      if (b) act(b.action);
+      return true;
     }
     return false;
   }
@@ -194,7 +290,7 @@
 
 <div class="stage" style="transform: translate({offset.x}px, {offset.y}px) scale({scale})">
   {#if !started || !view || !gs}
-    <Setup {onstart} />
+    <Setup {onstart} {input} {pads} />
   {:else}
     <PlayerCards players={players(gs)} {cashOverride} {shake} />
     <ContextPanel {gs} {actions} busy={view.busy} {actingName} error={view.error} onaction={act}>
@@ -218,6 +314,17 @@
     {/if}
     {#if panelSeat !== null && !view.busy}
       <ManagePanel {gs} seat={panelSeat} busy={view.busy} onaction={act} onclose={() => (manageSeat = null)} />
+    {/if}
+    {#if logOpen}
+      <LogPanel {gs} onclose={() => (logOpen = false)} />
+    {/if}
+    {#if waitingSeat !== null}
+      <div class="dimall"></div>
+      <div class="panel padlost">
+        <div class="pl-title">{gs.seats[waitingSeat].name}: reconnect controller</div>
+        <div class="pl-sub">The game is paused until the same controller is back.</div>
+        <ActionButton label="Continue with keyboard and mouse" onclick={() => { waitingSeat = null; controller.setPaused(paused); }} />
+      </div>
     {/if}
     {#if view.card}
       <div class="center"><DrawnCard card={view.card} playerName={gs.seats[view.card.seat].name} /></div>
@@ -299,6 +406,29 @@
     place-items: center;
     cursor: pointer;
     pointer-events: auto;
+  }
+  .dimall {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 5, 2, 0.6);
+  }
+  .padlost {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 760px;
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    text-align: center;
+  }
+  .pl-title {
+    font: 800 38px/1.1 'Fraunces', serif;
+  }
+  .pl-sub {
+    font: 600 18px/1.4 'Source Sans 3', sans-serif;
+    color: var(--ink-2);
   }
   .menu img {
     width: 34px;

@@ -26,6 +26,27 @@ export const GLYPH_SYMBOL: Record<Glyph, SymbolName> = {
   trade: 'button-triangle',
 };
 
+export type GlyphFamily = 'playstation' | 'nintendo';
+
+/**
+ * Prompt glyph for the acting controller. Nintendo pads by position: bottom B, right A, left Y,
+ * top X; with the swap setting, Confirm is A and Back is B. The approved set has A and B
+ * symbols; X and Y are drawn as lettered discs in the same style.
+ */
+export function glyphFor(g: Glyph, family: GlyphFamily = 'playstation', swap = false): { symbol?: SymbolName; letter?: string } {
+  if (family === 'playstation') return { symbol: GLYPH_SYMBOL[g] };
+  switch (g) {
+    case 'confirm':
+      return { symbol: swap ? 'button-switch-a' : 'button-switch-b' };
+    case 'back':
+      return { symbol: swap ? 'button-switch-b' : 'button-switch-a' };
+    case 'manage':
+      return { letter: 'Y' };
+    case 'trade':
+      return { letter: 'X' };
+  }
+}
+
 export interface ActionButton {
   action: Action;
   label: string;

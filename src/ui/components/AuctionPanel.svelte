@@ -40,7 +40,7 @@
 
   function amountFor(seat: number): number | null {
     const inc = BID_INCREMENTS[incIndex[seat] ?? 1];
-    const base = a.highBidder === null ? a.minBid - inc : a.highBid;
+    const base = a.highBidder === null ? 0 : a.highBid; // opening bid = the increment (at least the minimum)
     const amt = Math.max(a.minBid, base + inc);
     return amt <= gs.players[seat].cash ? amt : null;
   }

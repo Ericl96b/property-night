@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { GLYPH_SYMBOL, type Glyph } from '../present';
+  import { glyphFor, type Glyph, type GlyphFamily } from '../present';
   import { symbolUrl } from '../../render/symbols';
+  import { getContext } from 'svelte';
 
   let {
     label,
@@ -8,12 +9,16 @@
     primary = false,
     hint = '',
     disabled = false,
+    family,
     onclick,
-  }: { label: string; glyph?: Glyph; primary?: boolean; hint?: string; disabled?: boolean; onclick: () => void } = $props();
+  }: { label: string; glyph?: Glyph; primary?: boolean; hint?: string; disabled?: boolean; family?: GlyphFamily; onclick: () => void } = $props();
+  // Glyph family of the acting controller comes from context unless given explicitly.
+  const ctx = getContext<{ family: GlyphFamily; swap: boolean } | undefined>('glyphs');
+  const g = $derived(glyph ? glyphFor(glyph, family ?? ctx?.family ?? 'playstation', ctx?.swap ?? false) : null);
 </script>
 
 <button class="btn" class:primary {disabled} {onclick}>
-  {#if glyph}<img src={symbolUrl(GLYPH_SYMBOL[glyph])} alt="" />{:else}<span class="spacer"></span>{/if}
+  {#if g?.symbol}<img src={symbolUrl(g.symbol)} alt="" />{:else if g?.letter}<span class="letter">{g.letter}</span>{:else}<span class="spacer"></span>{/if}
   <span class="label">{label}</span>
   {#if hint}<span class="hint">{hint}</span>{/if}
 </button>
@@ -51,10 +56,20 @@
     background: #28503c;
   }
   img,
-  .spacer {
+  .spacer,
+  .letter {
     width: 44px;
     height: 44px;
     flex: none;
+  }
+  .letter {
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fff3c9, #c39445 60%, #5e4115);
+    color: var(--ink);
+    font: 800 20px/1 'Source Sans 3', sans-serif;
+    box-shadow: inset 0 0 0 3px rgba(43, 33, 25, 0.35);
   }
   .label {
     flex: 1;

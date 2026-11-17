@@ -10,20 +10,24 @@ Playable: set up 2–6 seats (human, bot or bank-backed bot), then roll, move, b
 
 ### Controls
 
+Each human seat owns one controller (join from the setup screen by pressing any button). Keyboard and mouse always work as a fallback.
+
 | Action | Keyboard | Controller (by position) |
 | --- | --- | --- |
-| Confirm (main button: roll, buy, end turn) / skip animation | Space / Enter | Bottom face (Cross / B) |
-| Back (decline, pass) | Escape | Right face (Circle / A) |
+| Confirm (main action, or the focused control) / skip animation | Space / Enter | Bottom face (Cross / B) |
+| Back (decline, pass, close) | Escape | Right face (Circle / A) |
 | Manage (build, mortgage) | B | Left face (Square / Y) |
 | Trade | V | Top face (Triangle / X) |
-| Nudge camera | Arrow keys | Right stick |
-| L1 / R1: auction bid increment | Q / E | L1 / R1 |
+| Auction bid increment | Q / E | L1 / R1 |
+| Navigate menus | Arrow keys | D-pad / left stick |
+| Nudge camera | Shift + arrows | Right stick |
 | Pause menu | P | Start (Options / +) |
-| Fullscreen | F | — |
+| Game log | L | Select (Share / −) |
+| Fullscreen | F | from the pause menu |
 
 Review URL parameters: `?quality=high|low`, `?seed=N`, `?speed=slow|normal|fast|instant`, `?auto=human,bot,bank` (start a game immediately).
 
-Review screenshots: [docs/m0/](docs/m0/) (visual prototype), [docs/m2/](docs/m2/), [docs/m3/](docs/m3/).
+Review screenshots: [docs/m0/](docs/m0/) (visual prototype), [docs/m2/](docs/m2/), [docs/m3/](docs/m3/), [docs/m4/](docs/m4/).
 
 ## Stack
 

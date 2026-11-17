@@ -66,6 +66,7 @@
         </label>
         <label class="chk"><input type="checkbox" checked={settings.boardRotation} onchange={(e) => onsetting({ boardRotation: (e.currentTarget as HTMLInputElement).checked })} /> Board rotation</label>
         <label class="chk"><input type="checkbox" checked={settings.cameraFollow} onchange={(e) => onsetting({ cameraFollow: (e.currentTarget as HTMLInputElement).checked })} /> Camera follow</label>
+        <label class="chk"><input type="checkbox" checked={settings.swapNintendo} onchange={(e) => onsetting({ swapNintendo: (e.currentTarget as HTMLInputElement).checked })} /> Swap Confirm/Back on Nintendo pads</label>
         <label class="chk"><input type="checkbox" checked={settings.reduceMotion} onchange={(e) => onsetting({ reduceMotion: (e.currentTarget as HTMLInputElement).checked })} /> Reduce motion</label>
         <label>Big payment from $
           <input type="number" min="0" step="50" value={settings.bigPaymentAmount} onchange={(e) => onsetting({ bigPaymentAmount: Math.max(0, Number((e.currentTarget as HTMLInputElement).value) || 0) })} />
