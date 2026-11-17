@@ -10,15 +10,20 @@ Milestone 0 — visual prototype (approval gate, SPEC §14). No rules yet: table
 
 ### Prototype controls
 
-| Action | Keyboard | Controller |
+| Action | Keyboard | Controller (by position) |
 | --- | --- | --- |
-| Roll dice (random values) | Space / Enter | Cross / B (bottom face) |
-| Rotate to next / previous side | E / Q | R1 / L1 |
-| Hop the active token | H | Square / Y (left face) |
-| Add a building | B | Triangle / X (top face) |
+| Roll dice (random engine values), then hop the active token; skip an animation | Space / Enter | Bottom face (Cross / B) |
+| Build on the active token's tile (or the next demo street) | B | Left face (Square / Y) |
+| Sell a building | V | Top face (Triangle / X) |
+| Rotate to previous / next side | Q / E | L1 / R1 |
+| Next player (camera rotates to their side) | N | D-pad right |
 | Nudge camera | Arrow keys | Right stick |
-| Fullscreen | F | Options / + |
-| Toggle HUD | Tab | Share / − |
+| Toggle overlay | Tab | Select (Share / −) |
+| Fullscreen | F | Start (Options / +) |
+
+Review URL parameters: `?quality=high|low`, `?seed=N`, `?side=0-3`, `?lineup=1` (all nine tokens on the bottom row), `?focus=x,z,zoom`, `?roll=1`, `?hud=0`.
+
+Review screenshots live in [docs/m0/](docs/m0/).
 
 ## Stack
 
@@ -36,7 +41,7 @@ Milestone 0 — visual prototype (approval gate, SPEC §14). No rules yet: table
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # Vitest: RNG fairness, dice relabel, board data
+npm test           # Vitest: RNG fairness (1M rolls), 10,000-throw dice relabel, board data
 npm run build      # typecheck + production build into dist/
 npm run preview    # serve dist/ on http://localhost:4173
 npm run fonts      # re-copy woff2 files from node_modules into public/fonts

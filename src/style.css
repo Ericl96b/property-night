@@ -1,0 +1,334 @@
+/* Self-hosted fonts (SPEC §2). Fraunces is the full variable file (wght + opsz axes). */
+@font-face {
+  font-family: 'Fraunces';
+  src: url('/fonts/fraunces-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Source Sans 3';
+  src: url('/fonts/source-sans-3-400.woff2') format('woff2');
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Source Sans 3';
+  src: url('/fonts/source-sans-3-500.woff2') format('woff2');
+  font-weight: 500;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Source Sans 3';
+  src: url('/fonts/source-sans-3-600.woff2') format('woff2');
+  font-weight: 600;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Source Sans 3';
+  src: url('/fonts/source-sans-3-700.woff2') format('woff2');
+  font-weight: 700;
+  font-display: block;
+}
+
+:root {
+  --ink: #2b2119;
+  --ink-2: #5e4c3b;
+  --paper: #f3ead6;
+  --paper-hi: #fbf6ea;
+  --oxblood: #8e2f23;
+  --forest: #2f5d46;
+  --brass: #c39445;
+  --walnut: #6a4330;
+  --panel-shadow: 0 2px 0 rgba(43, 33, 25, 0.08), 0 14px 34px rgba(10, 5, 2, 0.42), 0 3px 8px rgba(10, 5, 2, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #120a06;
+  color: var(--ink);
+  font-family: 'Source Sans 3', system-ui, sans-serif;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+.scene-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+/* Screen-space vignette (SPEC §10.3). */
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 75% 70% at 50% 52%, rgba(0, 0, 0, 0) 55%, rgba(8, 4, 2, 0.5) 100%);
+}
+
+/* Fixed 1920 × 1080 logical stage, scaled uniformly and letterboxed (SPEC §10.8). */
+.stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.stage > * {
+  pointer-events: auto;
+}
+.stage.hidden .panel {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.panel {
+  position: absolute;
+  background: var(--paper-hi);
+  border-radius: 10px;
+  box-shadow: var(--panel-shadow);
+  transition: opacity 0.2s;
+}
+
+/* ---- left column: seat cards ---------------------------------------------------------- */
+.seats {
+  left: 32px;
+  top: 32px;
+  width: 330px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.seat {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background: var(--paper);
+}
+.seat.active {
+  border-color: var(--seat-color);
+  background: #fff;
+}
+.seat-ring {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff3c9, #c39445 55%, #5e4115);
+  display: grid;
+  place-items: center;
+}
+.seat-ring::after {
+  content: '';
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--seat-color);
+  box-shadow: inset 0 2px 3px rgba(255, 255, 255, 0.45), inset 0 -2px 3px rgba(0, 0, 0, 0.25);
+}
+.seat-name {
+  font: 700 20px/1.1 'Fraunces', serif;
+  font-variation-settings: 'opsz' 36;
+}
+.seat-side {
+  white-space: nowrap;
+  font: 600 14px/1.2 'Source Sans 3', sans-serif;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.seat-cash {
+  font: 700 22px/1 'Fraunces', serif;
+  font-variation-settings: 'opsz' 36;
+}
+
+/* ---- right column: context panel ------------------------------------------------------ */
+.context {
+  right: 32px;
+  top: 32px;
+  width: 340px;
+  max-height: 1016px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.eyebrow {
+  font: 700 14px/1 'Source Sans 3', sans-serif;
+  letter-spacing: 2px;
+  white-space: nowrap;
+  text-transform: uppercase;
+  color: var(--oxblood);
+}
+.title {
+  font: 800 34px/1.05 'Fraunces', serif;
+  font-variation-settings: 'opsz' 72;
+  margin: 2px 0 0;
+}
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.btn {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 600 20px/1 'Source Sans 3', sans-serif;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1.5px rgba(43, 33, 25, 0.18);
+  text-align: left;
+}
+.btn:hover {
+  background: #efe3c8;
+}
+.btn.primary {
+  background: var(--forest);
+  color: var(--paper-hi);
+  box-shadow: none;
+}
+.btn.primary:hover {
+  background: #28503c;
+}
+.btn img,
+.btn .chip {
+  width: 44px;
+  height: 44px;
+  flex: none;
+}
+.btn .chip {
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--paper-hi);
+  font: 700 16px/1 'Source Sans 3', sans-serif;
+}
+.btn .label {
+  flex: 1;
+}
+.btn .hint {
+  font: 600 14px/1 'Source Sans 3', sans-serif;
+  color: var(--ink-2);
+  opacity: 0.8;
+}
+.btn.primary .hint {
+  color: var(--paper);
+}
+.row {
+  display: flex;
+  gap: 8px;
+}
+.row .btn {
+  flex: 1;
+}
+
+.roll {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 62px;
+  font: 800 36px/1 'Fraunces', serif;
+  font-variation-settings: 'opsz' 72;
+  white-space: nowrap;
+}
+.roll small {
+  font: 600 14px/1.2 'Source Sans 3', sans-serif;
+  color: var(--ink-2);
+}
+
+.settings {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px 12px;
+  font: 600 16px/1.2 'Source Sans 3', sans-serif;
+  border-top: 1px solid rgba(43, 33, 25, 0.15);
+  padding-top: 12px;
+}
+.settings select {
+  font: 600 16px 'Source Sans 3', sans-serif;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(43, 33, 25, 0.3);
+  background: #fff;
+  color: var(--ink);
+}
+.settings input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--forest);
+}
+
+.stats {
+  font: 500 14px/1.45 'Source Sans 3', sans-serif;
+  color: var(--ink-2);
+  border-top: 1px solid rgba(43, 33, 25, 0.15);
+  padding-top: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.stats b {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.log {
+  font: 500 15px/1.4 'Source Sans 3', sans-serif;
+  color: var(--ink);
+  max-height: 96px;
+  overflow: hidden;
+}
+
+.busy {
+  position: absolute;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%);
+  padding: 14px 22px;
+  font: 600 18px/1 'Source Sans 3', sans-serif;
+  display: none;
+}
+.busy.show {
+  display: block;
+}
+
+.splash {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--paper);
+  font: 700 18px/1 'Source Sans 3', sans-serif;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  background: #120a06;
+  transition: opacity 0.5s;
+  z-index: 5;
+}
+.splash.gone {
+  opacity: 0;
+  pointer-events: none;
+}
