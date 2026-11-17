@@ -41,7 +41,8 @@ Review screenshots live in [docs/m0/](docs/m0/).
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # Vitest: RNG fairness (1M rolls), 10,000-throw dice relabel, board data
+npm test           # Vitest: engine rules, RNG fairness (1M rolls), 10,000-throw dice relabel, 300 headless games
+npm run sim        # acceptance run: 10,000 headless bot games with invariants checked after every action
 npm run build      # typecheck + production build into dist/
 npm run preview    # serve dist/ on http://localhost:4173
 npm run fonts      # re-copy woff2 files from node_modules into public/fonts
@@ -52,7 +53,8 @@ npm run fonts      # re-copy woff2 files from node_modules into public/fonts
 ```
 src/
   data/      classic board data
-  engine/    rules engine (M0: seeded RNG only) — no rendering code
+  engine/    pure rules engine: apply(state, action) → { state, events }, legalActions, invariants
+  bots/      medium bot, bank-backed bot, headless runner
   render/    Three.js scene: table, board texture, board, tokens, buildings, dice, camera, lighting, quality
   director/  animation queue (skippable, speed-scaled)
   input/     keyboard + gamepad
@@ -60,4 +62,4 @@ src/
 tests/       Vitest suites
 ```
 
-Judgement calls where the spec is silent are logged in [DECISIONS.md](DECISIONS.md).
+Judgement calls where the spec is silent are logged in [DECISIONS.md](DECISIONS.md). Milestone status and open questions: [docs/PROGRESS.md](docs/PROGRESS.md).

@@ -1,0 +1,10 @@
+// Rules engine public API (SPEC §12). Pure: no rendering, no DOM.
+export { apply } from './apply';
+export { legalActions, manageActions, bidOptions, seatsToAct, BID_INCREMENTS } from './legal';
+export { newGame, cloneState, sidesFor, type NewGameConfig, type SeatConfig } from './state';
+export { checkInvariants } from './invariants';
+export { validateOffer, tradeTileBlocker } from './trade';
+export { CLASSIC_RULES, type Rules } from './rules';
+export { CLASSIC_CHANCE, CLASSIC_CHEST, type Card, type CardEffect, type DeckId } from './cards';
+export * from './queries';
+export * from './types';

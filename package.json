@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "fonts": "node scripts/copy-fonts.mjs"
+    "fonts": "node scripts/copy-fonts.mjs",
+    "sim": "tsx scripts/sim.ts"
   },
   "dependencies": {
     "cannon-es": "^0.20.0",
@@ -21,6 +22,7 @@
     "@fontsource/source-sans-3": "^5.3.1",
     "@types/node": "^26.6.6",
     "@types/three": "^0.187.0",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.0"
