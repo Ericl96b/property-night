@@ -2,6 +2,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 /**
  * Dev-only: POST a data URL to /__snap?name=foo and it is saved as .snapshots/foo.jpg.
@@ -30,7 +31,7 @@ function snapshots(): Plugin {
 
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? '/property-night/' : '/',
-  plugins: [snapshots()],
+  plugins: [svelte(), snapshots()],
   server: { port: 5173 },
   preview: { port: 4173 },
   build: { target: 'es2022', chunkSizeWarningLimit: 1500 },

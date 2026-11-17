@@ -33,7 +33,8 @@ export class Renderer {
     this.gl.toneMapping = THREE.ACESFilmicToneMapping;
     this.gl.toneMappingExposure = 1.0;
     this.gl.shadowMap.enabled = true;
-    this.gl.shadowMap.type = THREE.PCFSoftShadowMap;
+    // r18x removed PCFSoftShadowMap; PCF with a shadow radius gives the soft look.
+    this.gl.shadowMap.type = THREE.PCFShadowMap;
     this.gl.info.autoReset = false;
     this.gl.domElement.className = 'scene-canvas';
     container.appendChild(this.gl.domElement);

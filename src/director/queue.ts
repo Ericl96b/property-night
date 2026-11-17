@@ -17,6 +17,7 @@ export class AnimationQueue {
   private current?: { anim: Animation; tick?: (dt: number) => boolean };
   speed: Speed = 'normal';
   onIdle?: () => void;
+  private wasBusy = false;
 
   get factor(): number {
     return SPEED_FACTOR[this.speed];
@@ -37,6 +38,19 @@ export class AnimationQueue {
     this.current = undefined;
   }
 
+  /** Skip everything queued: each animation jumps straight to its end state. */
+  flush(): void {
+    this.skip();
+    let guard = 0;
+    while (this.queue.length && guard++ < 10_000) {
+      const next = this.queue.shift()!;
+      next.start();
+      next.finish?.();
+    }
+    this.wasBusy = false;
+    this.onIdle?.();
+  }
+
   /** Advance by dt seconds of wall time. Returns true while busy. */
   update(dt: number): boolean {
     let budget = 8; // allow several instant animations to complete in one frame
@@ -44,9 +58,14 @@ export class AnimationQueue {
       if (!this.current) {
         const next = this.queue.shift();
         if (!next) {
-          this.onIdle?.();
+          // Fire onIdle once per busy → idle transition, not every frame.
+          if (this.wasBusy) {
+            this.wasBusy = false;
+            this.onIdle?.();
+          }
           return false;
         }
+        this.wasBusy = true;
         const tick = next.start() ?? undefined;
         this.current = { anim: next, tick };
         if (!tick) {

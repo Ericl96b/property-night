@@ -107,7 +107,11 @@ export class Decals {
     this.desatMat.needsUpdate = true;
   }
 
+  private ownerColors = new Map<number, string | null>();
+
   setOwner(tile: number, color: string | null): void {
+    if ((this.ownerColors.get(tile) ?? null) === color) return;
+    this.ownerColors.set(tile, color);
     const old = this.owners.get(tile);
     if (old) this.group.remove(old);
     this.owners.delete(tile);
@@ -123,6 +127,7 @@ export class Decals {
   }
 
   setMortgaged(tile: number, on: boolean): void {
+    if (this.mortgaged.has(tile) === on) return;
     const old = this.mortgaged.get(tile);
     if (old) this.group.remove(old);
     this.mortgaged.delete(tile);
@@ -158,6 +163,7 @@ export class Decals {
   }
 
   setPromise(tile: number, on: boolean): void {
+    if (this.promises.has(tile) === on) return;
     const old = this.promises.get(tile);
     if (old) this.group.remove(old);
     this.promises.delete(tile);

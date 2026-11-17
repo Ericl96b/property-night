@@ -1,0 +1,234 @@
+// Game controller: owns the engine state, applies actions, hands events to the director,
+// paces bots, and runs the auction timer. The UI reads `view` and calls `dispatch`.
+// Plain TypeScript with injectable timing so it runs headless in tests.
+import {
+  apply,
+  EngineError,
+  legalActions,
+  newGame,
+  seatsToAct,
+  type Action,
+  type GameEvent,
+  type NewGameConfig,
+  type State,
+} from '../engine';
+import { chooseAction } from '../bots';
+import type { CardView, DirectorLike } from '../director/director';
+import type { Speed } from '../director/queue';
+
+export interface GameView {
+  /** State as currently shown (lags the engine while animations play). */
+  state: State;
+  busy: boolean;
+  card: CardView | null;
+  /** Seats a human may act for right now. */
+  humanActors: number[];
+  /** Auction countdown end (ms timestamp) when the timer is running. */
+  auctionDeadline: number | null;
+  error: string | null;
+  events: GameEvent[];
+}
+
+export interface Clock {
+  now(): number;
+  setTimeout(f: () => void, ms: number): unknown;
+  clearTimeout(h: unknown): void;
+}
+
+const realClock: Clock = {
+  now: () => performance.now(),
+  setTimeout: (f, ms) => setTimeout(f, ms),
+  clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+};
+
+const BOT_PAUSE: Record<Speed, number> = { slow: 1100, normal: 650, fast: 300, instant: 0 };
+
+type Listener = (v: GameView) => void;
+
+export class GameController {
+  state!: State;
+  private shown!: State;
+  private listeners = new Set<Listener>();
+  private card: CardView | null = null;
+  private error: string | null = null;
+  private lastEvents: GameEvent[] = [];
+  private botTimer: unknown = null;
+  private auctionTimer: unknown = null;
+  private auctionDeadline: number | null = null;
+  private auctionKey = '';
+  private rotate = 0;
+  speed: Speed = 'normal';
+  /** Paused (menu open, disconnect): bots and timers wait. */
+  paused = false;
+
+  constructor(
+    private director: DirectorLike | null,
+    private clock: Clock = realClock,
+  ) {}
+
+  /** Director hooks. */
+  onCard = (c: CardView | null) => {
+    this.card = c;
+    this.emit();
+  };
+
+  onIdle = () => {
+    this.shown = this.state;
+    this.emit();
+    this.pump();
+  };
+
+  start(cfg: NewGameConfig): void {
+    this.load(newGame(cfg));
+  }
+
+  load(state: State): void {
+    this.stopTimers();
+    this.state = state;
+    this.shown = state;
+    this.director?.sync(state);
+    this.emit();
+    this.pump();
+  }
+
+  get view(): GameView {
+    return {
+      state: this.shown,
+      busy: !!this.director?.busy,
+      card: this.card,
+      humanActors: this.humanActors(),
+      auctionDeadline: this.auctionDeadline,
+      error: this.error,
+      events: this.lastEvents,
+    };
+  }
+
+  subscribe(l: Listener): () => void {
+    this.listeners.add(l);
+    l(this.view);
+    return () => this.listeners.delete(l);
+  }
+
+  private emit(): void {
+    const v = this.view;
+    for (const l of this.listeners) l(v);
+  }
+
+  humanActors(): number[] {
+    if (!this.state || this.director?.busy) return [];
+    return seatsToAct(this.state).filter((i) => this.state.seats[i].kind === 'human');
+  }
+
+  /** Legal actions for a seat (empty while animating). */
+  actionsFor(seat: number): Action[] {
+    if (this.director?.busy || !this.state) return [];
+    return legalActions(this.state, seat);
+  }
+
+  /** Apply an action. Returns an error message for illegal actions instead of throwing. */
+  dispatch(action: Action): string | null {
+    if (this.director?.busy && action.type !== 'auctionTimeout') {
+      this.director.skip();
+    }
+    let events: GameEvent[];
+    try {
+      const r = apply(this.state, action);
+      this.state = r.state;
+      events = r.events;
+    } catch (e) {
+      if (e instanceof EngineError) {
+        this.error = e.message;
+        this.emit();
+        return e.message;
+      }
+      throw e;
+    }
+    this.error = null;
+    this.lastEvents = events;
+    if (this.director) {
+      this.director.play(events, this.state);
+      this.emit();
+    } else {
+      this.onIdle();
+    }
+    this.afterAction(action, events);
+    return null;
+  }
+
+  /** Skip running animations (Confirm). */
+  skip(): void {
+    this.director?.skip();
+  }
+
+  private stopTimers(): void {
+    if (this.botTimer) this.clock.clearTimeout(this.botTimer);
+    if (this.auctionTimer) this.clock.clearTimeout(this.auctionTimer);
+    this.botTimer = null;
+    this.auctionTimer = null;
+    this.auctionDeadline = null;
+    this.auctionKey = '';
+  }
+
+  private afterAction(action: Action, events: GameEvent[]): void {
+    // Auction timer: (re)start on a new auction and on every bid.
+    if (this.state.phase !== 'auction') {
+      if (this.auctionTimer) this.clock.clearTimeout(this.auctionTimer);
+      this.auctionTimer = null;
+      this.auctionDeadline = null;
+      this.auctionKey = '';
+    } else if (events.some((e) => e.type === 'auctionStarted' || e.type === 'bid')) {
+      this.armAuctionTimer();
+    }
+    void action;
+  }
+
+  private armAuctionTimer(): void {
+    const secs = this.state.rules.auctionTimer;
+    if (this.auctionTimer) this.clock.clearTimeout(this.auctionTimer);
+    this.auctionTimer = null;
+    this.auctionDeadline = null;
+    if (secs <= 0) return;
+    const ms = secs * 1000;
+    this.auctionDeadline = this.clock.now() + ms;
+    const key = `${this.state.turnNumber}:${this.state.auction?.tile}:${this.state.auction?.highBid}`;
+    this.auctionKey = key;
+    const fire = () => {
+      if (this.paused) {
+        this.auctionTimer = this.clock.setTimeout(fire, 250);
+        return;
+      }
+      if (this.state.phase === 'auction' && this.auctionKey === key) this.dispatch({ type: 'auctionTimeout', seat: -1 });
+    };
+    this.auctionTimer = this.clock.setTimeout(fire, ms);
+  }
+
+  /** Let bots act when the scene is idle. */
+  pump(): void {
+    if (this.paused || !this.state || this.state.phase === 'gameOver') return;
+    if (this.director?.busy || this.botTimer) return;
+    // Auctions started while animations ran need their timer.
+    if (this.state.phase === 'auction' && this.auctionDeadline === null && this.state.rules.auctionTimer > 0) this.armAuctionTimer();
+    const actors = seatsToAct(this.state);
+    const bots = actors.filter((i) => this.state.seats[i].kind !== 'human');
+    if (!bots.length) return;
+    const delay = this.state.phase === 'auction' ? BOT_PAUSE[this.speed] * 0.9 : BOT_PAUSE[this.speed];
+    this.botTimer = this.clock.setTimeout(() => {
+      this.botTimer = null;
+      if (this.paused || this.director?.busy) return;
+      const now = seatsToAct(this.state).filter((i) => this.state.seats[i].kind !== 'human');
+      let chosen: Action | null = null;
+      for (let k = 0; k < now.length && !chosen; k++) chosen = chooseAction(this.state, now[(this.rotate + k) % now.length]);
+      this.rotate++;
+      if (chosen) this.dispatch(chosen);
+      else if (this.state.phase === 'auction' && this.state.rules.auctionTimer <= 0 && !this.humanActors().length) {
+        this.dispatch({ type: 'auctionTimeout', seat: -1 });
+      }
+      this.pump();
+    }, delay);
+  }
+
+  setPaused(p: boolean): void {
+    this.paused = p;
+    if (!p) this.pump();
+  }
+}

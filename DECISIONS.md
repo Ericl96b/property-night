@@ -60,3 +60,16 @@ Where SPEC.md is silent, the decision taken is recorded here (SPEC §0).
 - **Medium bot:** keeps a reserve of $150 + 30% of the worst rent it could face (max $500); values a lot at its price, ×1.7 if it completes the bot's set, ×1.4 if it blocks an opponent's set, ×1.2 if the bot already owns part of the set; bids up to that value (keeping half the reserve). It proposes one set-completing trade per turn, raising its cash offer from 1.8× to 4× the price over the game, or a set-for-set swap; it accepts only trades worth ≥ 115% of what it gives (handing someone a set counts heavily). It builds to 3 houses as specified, but goes on to hotels when it is very cash-rich (> reserve + $1,500) or the bank is out of houses; otherwise 5–6 player games stall with every house on the board.
 - **Bank-backed bot money pump:** because it pays rent from the bank's unlimited money, games that include one can run indefinitely. Kept exactly as specified; listed as an open question.
 - **Card text and board names:** two Chance cards name tiles ("Rose Court", "Midnight Park", "North Line", "Scarlet Square"). The card editor (M8) will template these from the board preset so renamed boards stay consistent.
+
+## Milestone 2 — engine → director → scene (2026-11-17)
+
+- **UI framework:** Svelte 5 components for the overlay. `svelte-check` does not support TypeScript 7 yet, so components stay thin and all logic lives in type-checked `.ts` modules (`src/app/controller.ts`, `src/ui/present.ts`).
+- **Shown state lags the engine:** the overlay shows the state as of the last finished animation batch (cash, deeds, prompts update when the director goes idle), so numbers never change before the animation that explains them.
+- **Confirm skips:** pressing Confirm (or Back) while animations play jumps every queued animation to its end state.
+- **Bot pacing:** Slow 1.1 s, Normal 0.65 s, Fast 0.3 s, Instant none, between bot decisions; auctions use 90% of that.
+- **Auction timer** lives in the controller (8 s Classic, reset on each bid) and sends `auctionTimeout`; pausing holds bots and the timer.
+- **Hidden tab:** rendering and animations pause while the tab is hidden (browser behavior); the game simply waits.
+- **Shadows:** three.js r187 removed `PCFSoftShadowMap`; using `PCFShadowMap` with a shadow radius.
+- **Jail placement:** tokens *in* jail stand inside the jail square; visitors stand on the Just Visiting strip.
+- **Setup screen is interim:** seats (Human / Bot / Bank-backed bot), name, token, color, random order. Controllers and presets join it in M4/M6/M10.
+- **Review tooling:** `scripts/cdp.mjs` drives headless Chrome over the DevTools Protocol in real time (clicks, keys, evaluation, screenshots) using plans in `scripts/plans/`, so UI checks run unattended. `?auto=human,bot,…` starts a game directly; `?speed=` sets the speed.

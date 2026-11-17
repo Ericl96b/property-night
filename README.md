@@ -6,24 +6,22 @@ A couch-play property-trading board game for one Windows PC on a 4K TV: two play
 
 ## Status
 
-Milestone 0 — visual prototype (approval gate, SPEC §14). No rules yet: table, generated board face, lighting, all nine tokens, houses and hotels, the physics-for-look / RNG-for-result dice pipeline, camera rotation per side and token hop with follow.
+Playable: set up 2–6 seats (human, bot or bank-backed bot), then roll, move, buy, pay rent, draw cards, go to jail and end turns, with the director animating every engine event. See [docs/PROGRESS.md](docs/PROGRESS.md) for milestone status.
 
-### Prototype controls
+### Controls
 
 | Action | Keyboard | Controller (by position) |
 | --- | --- | --- |
-| Roll dice (random engine values), then hop the active token; skip an animation | Space / Enter | Bottom face (Cross / B) |
-| Build on the active token's tile (or the next demo street) | B | Left face (Square / Y) |
-| Sell a building | V | Top face (Triangle / X) |
-| Rotate to previous / next side | Q / E | L1 / R1 |
-| Next player (camera rotates to their side) | N | D-pad right |
+| Confirm (main button: roll, buy, end turn) / skip animation | Space / Enter | Bottom face (Cross / B) |
+| Back (decline, pass) | Escape | Right face (Circle / A) |
+| Manage (build, mortgage) | B | Left face (Square / Y) |
+| Trade | V | Top face (Triangle / X) |
 | Nudge camera | Arrow keys | Right stick |
-| Toggle overlay | Tab | Select (Share / −) |
 | Fullscreen | F | Start (Options / +) |
 
-Review URL parameters: `?quality=high|low`, `?seed=N`, `?side=0-3`, `?lineup=1` (all nine tokens on the bottom row), `?focus=x,z,zoom`, `?roll=1`, `?hud=0`.
+Review URL parameters: `?quality=high|low`, `?seed=N`, `?speed=slow|normal|fast|instant`, `?auto=human,bot,bank` (start a game immediately).
 
-Review screenshots live in [docs/m0/](docs/m0/).
+Review screenshots: [docs/m0/](docs/m0/) (visual prototype), [docs/m2/](docs/m2/).
 
 ## Stack
 
@@ -46,6 +44,7 @@ npm run sim        # acceptance run: 10,000 headless bot games with invariants c
 npm run build      # typecheck + production build into dist/
 npm run preview    # serve dist/ on http://localhost:4173
 npm run fonts      # re-copy woff2 files from node_modules into public/fonts
+node scripts/cdp.mjs scripts/plans/m2-human.mjs   # headless Chrome UI check (dev server running)
 ```
 
 ## Layout
@@ -56,9 +55,10 @@ src/
   engine/    pure rules engine: apply(state, action) → { state, events }, legalActions, invariants
   bots/      medium bot, bank-backed bot, headless runner
   render/    Three.js scene: table, board texture, board, tokens, buildings, dice, camera, lighting, quality
-  director/  animation queue (skippable, speed-scaled)
+  director/  director (engine events → animations) and the animation queue
+  app/       game controller (state, dispatch, bot pacing, auction timer)
   input/     keyboard + gamepad
-  ui/        HTML overlay
+  ui/        Svelte overlay (setup, player cards, context panel, deeds, cards)
 tests/       Vitest suites
 ```
 

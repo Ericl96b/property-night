@@ -332,3 +332,16 @@ body {
   opacity: 0;
   pointer-events: none;
 }
+
+.overlay-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.overlay-root .stage {
+  pointer-events: none;
+}
+.overlay-root .panel,
+.overlay-root .panel * {
+  pointer-events: auto;
+}

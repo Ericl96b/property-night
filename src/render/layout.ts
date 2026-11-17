@@ -92,8 +92,25 @@ export function tileLocalToWorld(f: TileFrame, lx: number, ly: number): [number,
   return refToWorld(px, py);
 }
 
+/** Pseudo-tile for tokens that are *in* jail (inside the jail square, not Just Visiting). */
+export const IN_JAIL = 40;
+
 /** Where tokens stand on a tile: positions for `n` tokens, fanned out in a small arc. */
 export function tokenSpots(index: number, n: number): [number, number][] {
+  if (index === IN_JAIL) {
+    // Inside the orange jail square (38–132 × 868–962 px), tokens in a tight grid.
+    const perRow = 2;
+    const spacing = 30;
+    const rows = Math.ceil(n / perRow);
+    const out: [number, number][] = [];
+    for (let i = 0; i < n; i++) {
+      const row = Math.floor(i / perRow);
+      const inRow = Math.min(perRow, n - row * perRow);
+      const col = i - row * perRow;
+      out.push(refToWorld(85 + (col - (inRow - 1) / 2) * spacing, 915 + (row - (rows - 1) / 2) * spacing));
+    }
+    return out;
+  }
   const f = tileFrame(index);
   const local: [number, number][] = [];
   if (f.corner) {
