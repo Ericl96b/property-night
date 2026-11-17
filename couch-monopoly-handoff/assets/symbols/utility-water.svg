@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Water utility" width="64" height="64" viewBox="0 0 64 64"><path d="M27 15V10M19 9h16" stroke="#2B2119" stroke-width="4" stroke-linecap="round"></path>
+<path d="M6 18h30a12 12 0 0 1 12 12v6h-9v-4a4 4 0 0 0-4-4H6z" fill="#2B2119"></path>
+<rect x="3" y="15" width="5" height="16" rx="1.5" fill="#2B2119"></rect>
+<path d="M10 22h24" stroke="#F3EAD6" stroke-width="1.4" stroke-linecap="round" opacity=".75"></path>
+<rect x="37" y="36" width="13" height="3.5" rx="1" fill="#2B2119"></rect>
+<path d="M43.5 44c3.5 5.5 6 9 6 11.5a6 6 0 0 1-12 0c0-2.5 2.5-6 6-11.5z" fill="#2B2119"></path>
+<path d="M41 55a3 3 0 0 0 2.5 3" fill="none" stroke="#F3EAD6" stroke-width="1.4" stroke-linecap="round"></path></svg>

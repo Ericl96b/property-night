@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Free parking" width="64" height="64" viewBox="0 0 64 64"><path d="M4 41c0-5 3-8 8-8h6l7-10h17l7 10h5c4 0 6 3 6 7v5H4z" fill="#8E2F23"></path>
+<path d="M27 26h6v7h-12z" fill="#F3EAD6"></path><path d="M36 26h5l5 7H36z" fill="#F3EAD6"></path>
+<path d="M8 37h48" stroke="#F3EAD6" stroke-width="1.2" opacity=".6"></path>
+<circle cx="17" cy="46" r="7" fill="#8E2F23" stroke="#F3EAD6" stroke-width="1.6"></circle><circle cx="17" cy="46" r="2.4" fill="#F3EAD6"></circle>
+<circle cx="47" cy="46" r="7" fill="#8E2F23" stroke="#F3EAD6" stroke-width="1.6"></circle><circle cx="47" cy="46" r="2.4" fill="#F3EAD6"></circle>
+<path d="M2 56h60" stroke="#8E2F23" stroke-width="2" stroke-linecap="round"></path></svg>
