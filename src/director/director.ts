@@ -1,13 +1,14 @@
 // Director (SPEC §12): consumes engine events in order and turns them into a queue of
 // skippable, speed-scaled animations. The engine state is always the source of truth; after
 // every batch the scene is re-synced to it.
-import type * as THREE from 'three';
-import { BOARD_TOP, IN_JAIL, SIDE_YAW } from '../render/layout';
+import * as THREE from 'three';
+import { BOARD_TOP, IN_JAIL, SIDE_YAW, tileFrame, tileLocalToWorld } from '../render/layout';
 import { placeFlat, simulateThrow } from '../render/diceSim';
 import type { GameScene } from '../render/scene';
 import type { TokenId } from '../render/tokens/tokens';
 import { Rng } from '../engine/rng';
-import type { GameEvent, State } from '../engine';
+import { groupTiles, type Creditor, type GameEvent, type State } from '../engine';
+import { DEFAULT_SETTINGS, isBigPayment, type Settings } from '../app/settings';
 import type { Animation } from './queue';
 
 export interface CardView {
@@ -16,10 +17,29 @@ export interface CardView {
   seat: number;
 }
 
+export type Moment =
+  | {
+      kind: 'payment';
+      from: Creditor;
+      to: Creditor;
+      amount: number;
+      reason: string;
+      tile?: number;
+      /** Cash before and after, per seat (counters tick between them). */
+      before: number[];
+      after: number[];
+      duration: number;
+    }
+  | { kind: 'banner'; title: string; subtitle?: string; seat: number | null; tone: 'oxblood' | 'forest' | 'brass'; duration: number };
+
 export interface DirectorHooks {
   card(card: CardView | null): void;
+  moment(m: Moment | null): void;
   idle(): void;
 }
+
+const PAYMENT_TIME = 2.2;
+const BANNER_TIME = 1.5;
 
 /** What the controller needs from a director (a headless fake implements this in tests). */
 export interface DirectorLike {
@@ -33,6 +53,9 @@ const CARD_TIME = 2.6;
 
 export class Director implements DirectorLike {
   private cosmetic: Rng;
+
+  /** Live settings (payment thresholds). */
+  settings: () => Settings = () => DEFAULT_SETTINGS;
 
   constructor(
     private scene: GameScene,
@@ -61,10 +84,39 @@ export class Director implements DirectorLike {
     return { label, start: () => void f(), finish: () => {} };
   }
 
+  private momentAnim(m: Moment, tile?: number): Animation {
+    const sc = this.scene;
+    const end = () => {
+      this.hooks.moment(null);
+      if (tile !== undefined) sc.camera.pushIn(null);
+    };
+    return {
+      label: `moment ${m.kind}`,
+      start: () => {
+        this.hooks.moment(m);
+        if (tile !== undefined) {
+          const [x, z] = tileLocalToWorld(tileFrame(tile), 0, 0);
+          sc.camera.pushIn(new THREE.Vector3(x, BOARD_TOP, z));
+        }
+        let t = 0;
+        return (dt) => {
+          t += dt * (this.speed === Infinity ? 1000 : this.speed);
+          if (t < m.duration) return true;
+          end();
+          return false;
+        };
+      },
+      // Skip path; the natural end runs the same cleanup from the tick above.
+      finish: () => end(),
+    };
+  }
+
   play(events: GameEvent[], state: State): void {
     const q = this.scene.queue;
     const sc = this.scene;
     const speed = () => (this.speed === Infinity ? 1000 : this.speed);
+    const name = (i: number) => state.seats[i].name;
+    const setBanners = new Set<string>();
     for (const e of events) {
       switch (e.type) {
         case 'turnStarted': {
@@ -110,6 +162,12 @@ export class Director implements DirectorLike {
         case 'propertyTransferred': {
           const color = e.to === null ? null : state.seats[e.to].color;
           q.push(this.instant('owner', () => sc.decals.setOwner(e.tile, color)));
+          const g = state.board.tiles[e.tile].group;
+          if (e.to !== null && g && !setBanners.has(g) && groupTiles(state.board, g).every((i) => state.tiles[i].owner === e.to)) {
+            setBanners.add(g);
+            const sub = groupTiles(state.board, g).map((i) => state.board.tiles[i].name).join(' · ');
+            q.push(this.momentAnim({ kind: 'banner', title: `${name(e.to)} owns the full set`, subtitle: sub, seat: e.to, tone: 'forest', duration: BANNER_TIME }));
+          }
           break;
         }
         case 'mortgaged':
@@ -144,6 +202,26 @@ export class Director implements DirectorLike {
         case 'bankrupt': {
           const id = this.tokenOf(state, e.seat);
           q.push(this.instant('bankrupt', () => sc.tokens.remove(id)));
+          const sub = e.creditor === 'bank' ? 'Everything returns to the bank' : `Everything goes to ${name(e.creditor)}`;
+          q.push(this.momentAnim({ kind: 'banner', title: `${name(e.seat)} is bankrupt`, subtitle: sub, seat: e.seat, tone: 'oxblood', duration: BANNER_TIME }));
+          break;
+        }
+        case 'payment': {
+          if (e.reason === 'bankruptcy') break;
+          if (typeof e.from === 'number' && state.seats[e.from].kind === 'bankBot') break;
+          const payerBefore = typeof e.from === 'number' ? e.cash[e.from] + e.amount : null;
+          if (!isBigPayment(this.settings(), e.amount, payerBefore)) break;
+          const before = [...e.cash];
+          if (typeof e.from === 'number') before[e.from] += e.amount;
+          if (typeof e.to === 'number') before[e.to] -= e.amount;
+          const m: Moment = { kind: 'payment', from: e.from, to: e.to, amount: e.amount, reason: e.reason, tile: e.tile, before, after: e.cash, duration: PAYMENT_TIME };
+          q.push(this.momentAnim(m, e.tile));
+          break;
+        }
+        case 'auctionEnded': {
+          if (e.winner === null) break;
+          const sub = `${state.board.tiles[e.tile].name} for $${e.amount.toLocaleString('en-US')}`;
+          q.push(this.momentAnim({ kind: 'banner', title: `${name(e.winner)} wins the auction`, subtitle: sub, seat: e.winner, tone: 'brass', duration: BANNER_TIME }));
           break;
         }
         default:

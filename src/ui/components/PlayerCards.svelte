@@ -1,14 +1,23 @@
 <script lang="ts">
-  // Left column (SPEC §10.8): one card per seat.
+  // Left column (SPEC §10.8): one card per seat, token portrait, cash (ticks during payments).
+  import { getPortrait } from '../../render/portraits';
   import { money, type PlayerSummary } from '../present';
 
-  let { players }: { players: PlayerSummary[] } = $props();
+  let {
+    players,
+    cashOverride = null,
+    shake = null,
+  }: { players: PlayerSummary[]; cashOverride?: number[] | null; shake?: number | null } = $props();
 </script>
 
 <div class="panel seats">
   {#each players as p (p.seat)}
-    <div class="seat" class:active={p.active && !p.bankrupt} class:out={p.bankrupt} style="--seat-color:{p.color}">
-      <div class="ring"></div>
+    <div class="seat" data-seat={p.seat} class:active={p.active && !p.bankrupt} class:out={p.bankrupt} class:shake={shake === p.seat} style="--seat-color:{p.color}">
+      {#if getPortrait(p.token, p.color)}
+        <div class="portrait"><img src={getPortrait(p.token, p.color)} alt="" /></div>
+      {:else}
+        <div class="ring"></div>
+      {/if}
       <div class="info">
         <div class="name">{p.name}{#if p.kind === 'bot'}<span class="tag">BOT</span>{:else if p.kind === 'bankBot'}<span class="tag">BANK</span>{/if}</div>
         <div class="sub">
@@ -18,7 +27,7 @@
           {/if}
         </div>
       </div>
-      <div class="cash">{p.kind === 'bankBot' ? '∞' : money(p.cash)}</div>
+      <div class="cash">{p.kind === 'bankBot' ? '∞' : money(cashOverride ? cashOverride[p.seat] : p.cash)}</div>
     </div>
   {/each}
 </div>
@@ -35,10 +44,10 @@
   }
   .seat {
     display: grid;
-    grid-template-columns: 44px 1fr auto;
+    grid-template-columns: 48px 1fr auto;
     align-items: center;
     gap: 12px;
-    padding: 10px 12px;
+    padding: 8px 12px;
     border-radius: 8px;
     border: 2px solid transparent;
     background: var(--paper);
@@ -49,6 +58,35 @@
   }
   .out {
     opacity: 0.45;
+  }
+  .shake {
+    animation: shake 0.45s ease;
+  }
+  @keyframes shake {
+    20%,
+    60% {
+      transform: translateX(-6px);
+    }
+    40%,
+    80% {
+      transform: translateX(6px);
+    }
+  }
+  .portrait {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 40%, #fffaf0, #efe3c8);
+    box-shadow: inset 0 0 0 3px var(--seat-color);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+  .portrait img {
+    width: 54px;
+    height: 54px;
+    object-fit: contain;
+    transform: translateY(2px);
   }
   .ring {
     width: 40px;

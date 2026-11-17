@@ -38,6 +38,8 @@ function log(c: Ctx, seat: number | null, text: string): void {
 }
 
 const name = (c: Ctx, seat: number) => c.s.seats[seat].name;
+/** Every player's cash right after a payment (lets the UI tick counters precisely). */
+const cashSnap = (c: Ctx) => c.s.players.map((p) => p.cash);
 const tileName = (c: Ctx, tile: number) => c.s.board.tiles[tile].name;
 
 // ---- money ---------------------------------------------------------------------------------
@@ -54,7 +56,7 @@ function addDebt(c: Ctx, from: number, to: Creditor, amount: number, reason: str
   if (isBankBot(c.s, from)) {
     // Unlimited money: the bank pays on the bank-backed bot's behalf.
     if (typeof to === 'number') credit(c, to, amount);
-    c.ev.push({ type: 'payment', from, to, amount, reason, tile: opts.tile });
+    c.ev.push({ type: 'payment', cash: cashSnap(c), from, to, amount, reason, tile: opts.tile });
     return;
   }
   c.s.debts.push({ from, to, amount, reason, ...opts });
@@ -73,7 +75,7 @@ function settle(c: Ctx, i: number): void {
       c.s.players[d.to].stats.rentReceived += d.amount;
     }
   }
-  c.ev.push({ type: 'payment', from: d.from, to: d.to, amount: d.amount, reason: d.reason, tile: d.tile });
+  c.ev.push({ type: 'payment', cash: cashSnap(c), from: d.from, to: d.to, amount: d.amount, reason: d.reason, tile: d.tile });
   log(c, d.from, `${name(c, d.from)} paid $${d.amount} ${d.to === 'bank' ? 'to the bank' : `to ${name(c, d.to)}`} (${d.reason})`);
   c.s.debts.splice(i, 1);
 }
@@ -179,7 +181,7 @@ function landOn(c: Ctx, seat: number, tile: number, mods: RentMods = {}): void {
       const amount = fp === 'fixed' ? s.rules.freeParkingBonus : s.freeParkingPot;
       if (amount > 0) {
         credit(c, seat, amount);
-        c.ev.push({ type: 'payment', from: 'bank', to: seat, amount, reason: 'Free Parking' });
+        c.ev.push({ type: 'payment', cash: cashSnap(c), from: 'bank', to: seat, amount, reason: 'Free Parking' });
         log(c, seat, `${name(c, seat)} collected $${amount} on Free Parking`);
       }
       if (fp !== 'fixed') s.freeParkingPot = fp === 'potSeed' ? s.rules.freeParkingSeed : 0;
@@ -208,7 +210,7 @@ function drawCard(c: Ctx, seat: number, deck: DeckId): void {
   switch (e.kind) {
     case 'collect':
       credit(c, seat, e.amount);
-      c.ev.push({ type: 'payment', from: 'bank', to: seat, amount: e.amount, reason: 'card' });
+      c.ev.push({ type: 'payment', cash: cashSnap(c), from: 'bank', to: seat, amount: e.amount, reason: 'card' });
       return;
     case 'pay':
       addDebt(c, seat, 'bank', e.amount, 'card', { pot: true });
@@ -337,7 +339,7 @@ function bankrupt(c: Ctx, seat: number, creditor: Creditor): void {
   if (toPlayer) {
     const cr = creditor as number;
     credit(c, cr, p.cash);
-    if (p.cash > 0) c.ev.push({ type: 'payment', from: seat, to: cr, amount: p.cash, reason: 'bankruptcy' });
+    if (p.cash > 0) c.ev.push({ type: 'payment', cash: cashSnap(c), from: seat, to: cr, amount: p.cash, reason: 'bankruptcy' });
     const mortgaged: number[] = [];
     for (const i of owned) {
       s.tiles[i].owner = cr;
@@ -434,7 +436,7 @@ function executeTrade(c: Ctx, o: TradeOffer): void {
     if (side.cash > 0) {
       s.players[giver].cash -= side.cash;
       s.players[taker].cash += side.cash;
-      c.ev.push({ type: 'payment', from: giver, to: taker, amount: side.cash, reason: 'trade' });
+      c.ev.push({ type: 'payment', cash: cashSnap(c), from: giver, to: taker, amount: side.cash, reason: 'trade' });
     }
     for (let k = 0; k < side.gojf; k++) s.players[taker].gojf.push(s.players[giver].gojf.shift()!);
   };
@@ -599,7 +601,7 @@ export function apply(state: State, action: Action): ApplyResult {
       if (p.cash < s.rules.jailFine) fail('not enough cash');
       p.cash -= s.rules.jailFine;
       if (s.rules.freeParking === 'pot' || s.rules.freeParking === 'potSeed') s.freeParkingPot += s.rules.jailFine;
-      c.ev.push({ type: 'payment', from: seat, to: 'bank', amount: s.rules.jailFine, reason: 'jail fine' });
+      c.ev.push({ type: 'payment', cash: cashSnap(c), from: seat, to: 'bank', amount: s.rules.jailFine, reason: 'jail fine' });
       release(c, seat, 'fine');
       log(c, seat, `${name(c, seat)} paid the $${s.rules.jailFine} fine`);
       break;

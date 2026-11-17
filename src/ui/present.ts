@@ -1,8 +1,14 @@
 // Presentation helpers for the overlay: labels, deed data, money. Typed TS so the Svelte
 // components stay thin.
 import {
+  buildBlocker,
   buildingCounts,
+  buildingSellValue,
+  liquidationValue,
+  mortgageBlocker,
   mortgageValue,
+  sellBlocker,
+  unmortgageBlocker,
   unmortgageCost,
   type Action,
   type State,
@@ -247,4 +253,95 @@ export function focusTile(s: State): number {
   if (s.phase === 'auction') return s.auction!.tile;
   const p = s.players[s.turn.seat];
   return p.position;
+}
+
+
+// ---- Manage / raise money --------------------------------------------------------------------
+
+export interface ManageOp {
+  action: Action;
+  label: string;
+  ok: boolean;
+  reason: string | null;
+}
+
+export interface ManageRow {
+  tile: number;
+  name: string;
+  color: string;
+  buildings: number;
+  mortgaged: boolean;
+  ops: ManageOp[];
+}
+
+export interface ManageGroup {
+  key: string;
+  label: string;
+  color: string;
+  full: boolean;
+  rows: ManageRow[];
+}
+
+const GROUP_LABEL: Record<string, string> = {
+  brown: 'Brown',
+  lightBlue: 'Light blue',
+  pink: 'Pink',
+  orange: 'Orange',
+  red: 'Red',
+  yellow: 'Yellow',
+  green: 'Green',
+  darkBlue: 'Dark blue',
+};
+
+/** Every property a seat owns, grouped by set, with each management action and why it is blocked. */
+export function manageGroups(s: State, seat: number): ManageGroup[] {
+  const groups = new Map<string, ManageGroup>();
+  for (const t of s.board.tiles) {
+    const ts = s.tiles[t.index];
+    if (ts.owner !== seat) continue;
+    const key = t.group ?? t.type;
+    const color = t.group ? s.board.groups[t.group].color : t.type === 'railroad' ? '#2B2119' : '#5E4C3B';
+    const label = t.group ? GROUP_LABEL[t.group] ?? t.group : t.type === 'railroad' ? 'Railroads' : 'Utilities';
+    if (!groups.has(key)) {
+      const all = s.board.tiles.filter((x) => (x.group ?? x.type) === key);
+      groups.set(key, { key, label, color, full: !!t.group && all.every((x) => s.tiles[x.index].owner === seat), rows: [] });
+    }
+    const tile = t.index;
+    const ops: ManageOp[] = [];
+    if (t.type === 'street') {
+      const b = buildBlocker(s, seat, tile);
+      ops.push({ action: { type: 'build', seat, tile }, label: `${ts.buildings === 4 ? 'Hotel' : 'House'} −${money(t.houseCost ?? 0)}`, ok: !b, reason: b });
+      const sb = sellBlocker(s, seat, tile);
+      ops.push({ action: { type: 'sell', seat, tile }, label: `Sell +${money(buildingSellValue(s, tile))}`, ok: !sb, reason: sb });
+    }
+    if (ts.mortgaged) {
+      const u = unmortgageBlocker(s, seat, tile);
+      ops.push({ action: { type: 'unmortgage', seat, tile }, label: `Unmortgage −${money(unmortgageCost(s, tile))}`, ok: !u, reason: u });
+    } else {
+      const m = mortgageBlocker(s, seat, tile);
+      ops.push({ action: { type: 'mortgage', seat, tile }, label: `Mortgage +${money(mortgageValue(s, tile))}`, ok: !m, reason: m });
+    }
+    groups.get(key)!.rows.push({ tile, name: t.name, color, buildings: ts.buildings, mortgaged: ts.mortgaged, ops });
+  }
+  return [...groups.values()];
+}
+
+export interface DebtInfo {
+  debtor: number;
+  amount: number;
+  to: string;
+  cash: number;
+  canCover: boolean;
+}
+
+export function debtInfo(s: State): DebtInfo | null {
+  if (s.phase !== 'debt') return null;
+  const d = s.debts[0];
+  return {
+    debtor: d.from,
+    amount: d.amount,
+    to: d.to === 'bank' ? 'the bank' : s.seats[d.to].name,
+    cash: s.players[d.from].cash,
+    canCover: liquidationValue(s, d.from) >= d.amount,
+  };
 }

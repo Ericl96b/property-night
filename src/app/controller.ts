@@ -13,7 +13,7 @@ import {
   type State,
 } from '../engine';
 import { chooseAction } from '../bots';
-import type { CardView, DirectorLike } from '../director/director';
+import type { CardView, DirectorLike, Moment } from '../director/director';
 import type { Speed } from '../director/queue';
 
 export interface GameView {
@@ -21,6 +21,7 @@ export interface GameView {
   state: State;
   busy: boolean;
   card: CardView | null;
+  moment: Moment | null;
   /** Seats a human may act for right now. */
   humanActors: number[];
   /** Auction countdown end (ms timestamp) when the timer is running. */
@@ -50,6 +51,7 @@ export class GameController {
   private shown!: State;
   private listeners = new Set<Listener>();
   private card: CardView | null = null;
+  private moment: Moment | null = null;
   private error: string | null = null;
   private lastEvents: GameEvent[] = [];
   private botTimer: unknown = null;
@@ -72,6 +74,11 @@ export class GameController {
     this.emit();
   };
 
+  onMoment = (m: Moment | null) => {
+    this.moment = m;
+    this.emit();
+  };
+
   onIdle = () => {
     this.shown = this.state;
     this.emit();
@@ -80,6 +87,18 @@ export class GameController {
 
   start(cfg: NewGameConfig): void {
     this.load(newGame(cfg));
+  }
+
+  /** Back to the setup screen. */
+  reset(): void {
+    this.stopTimers();
+    this.director?.skip();
+    this.state = undefined as unknown as State;
+    this.shown = undefined as unknown as State;
+    this.card = null;
+    this.moment = null;
+    this.paused = false;
+    this.emit();
   }
 
   load(state: State): void {
@@ -96,6 +115,7 @@ export class GameController {
       state: this.shown,
       busy: !!this.director?.busy,
       card: this.card,
+      moment: this.moment,
       humanActors: this.humanActors(),
       auctionDeadline: this.auctionDeadline,
       error: this.error,

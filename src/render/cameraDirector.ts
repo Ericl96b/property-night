@@ -139,6 +139,21 @@ export class CameraDirector {
     this.returning = false;
   }
 
+  /** Payment moment: push in slightly on a board point (null returns to rest). SPEC §10.9. */
+  pushIn(point: THREE.Vector3 | null): void {
+    if (!point || this.settings.reduceMotion) {
+      this.followTarget.set(0, 0);
+      this.zoomTarget = 1;
+      this.returning = true;
+      return;
+    }
+    const f = new THREE.Vector2(point.x, point.z).multiplyScalar(0.35);
+    if (f.length() > FOLLOW_MAX_OFFSET) f.setLength(FOLLOW_MAX_OFFSET);
+    this.followTarget.copy(f);
+    this.zoomTarget = 0.86;
+    this.returning = false;
+  }
+
   /** Review helper: hold the view centered on a board point at a zoom factor (< 1 = closer). */
   frame(x: number, z: number, zoom: number): void {
     this.followTarget.set(x, z);

@@ -109,7 +109,7 @@ for (const step of plan.steps) {
     if (!ok) failed = true;
   }
   if (step.key) {
-    const codes = { Space: [' ', 32], Enter: ['Enter', 13], Escape: ['Escape', 27], KeyB: ['b', 66], KeyV: ['v', 86], KeyN: ['n', 78], Tab: ['Tab', 9] };
+    const codes = { Space: [' ', 32], Enter: ['Enter', 13], Escape: ['Escape', 27], KeyP: ['p', 80], KeyB: ['b', 66], KeyV: ['v', 86], KeyN: ['n', 78], Tab: ['Tab', 9] };
     const [key, kc] = codes[step.key] ?? [step.key, 0];
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: step.key, windowsVirtualKeyCode: kc });
     await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: step.key, windowsVirtualKeyCode: kc });

@@ -73,3 +73,13 @@ Where SPEC.md is silent, the decision taken is recorded here (SPEC §0).
 - **Jail placement:** tokens *in* jail stand inside the jail square; visitors stand on the Just Visiting strip.
 - **Setup screen is interim:** seats (Human / Bot / Bank-backed bot), name, token, color, random order. Controllers and presets join it in M4/M6/M10.
 - **Review tooling:** `scripts/cdp.mjs` drives headless Chrome over the DevTools Protocol in real time (clicks, keys, evaluation, screenshots) using plans in `scripts/plans/`, so UI checks run unattended. `?auto=human,bot,…` starts a game directly; `?speed=` sets the speed.
+
+## Milestone 3 — auctions, building, raise money, payments (2026-11-17)
+
+- **Auction screen:** every human in the auction gets a row with the four increments (+$1/+$10/+$50/+$100, default +$10), a Bid button showing the exact amount, and Pass. The first increment applies to the opening bid. Keyboard drives the first human still able to act; per-controller input arrives in M4.
+- **Manage screen:** properties grouped by color set (railroads and utilities too); every action is always listed, disabled with the engine's reason on hover when it cannot run (evenness, supply, mortgaged lot, cash). Raise-money reuses it as a blocking panel that cannot be dismissed and closes itself once the debt settles.
+- **Payment moment:** payments of $200+ or 25%+ of the payer's cash (settings) show the banner with both token portraits, the place or reason, the amount in Fraunces, banknotes flying payer → payee (largest first, max 12, then a "+$X" chip), counters ticking, a 0.4 s camera push-in on the tile, and a shake if the payer ends below $100. The bank's position is the board center. Bank-backed bots' payments and bankruptcy hand-overs do not trigger it.
+- **Other moments (1.5 s banner):** bankruptcy, auction win, completing a color set.
+- **Token portraits** are rendered from the 3D brass tokens at game start with a small separate renderer (the reference SVGs are proportion references only).
+- **Pause menu** (Start/Options, keyboard P, or the menu icon top center): resume, fullscreen, forfeit per human seat (with a confirm step), new game (confirm), and settings: speed, quality, board rotation, camera follow, reduce motion, big-payment thresholds. Settings persist in localStorage until saves move to IndexedDB in M9. Pausing holds bots and the auction timer.
+- **Svelte naming:** components avoid a variable named `state` (Svelte 5 treats `$state` as a store subscription when one exists); game state props are named `gs`.

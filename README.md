@@ -17,11 +17,13 @@ Playable: set up 2–6 seats (human, bot or bank-backed bot), then roll, move, b
 | Manage (build, mortgage) | B | Left face (Square / Y) |
 | Trade | V | Top face (Triangle / X) |
 | Nudge camera | Arrow keys | Right stick |
-| Fullscreen | F | Start (Options / +) |
+| L1 / R1: auction bid increment | Q / E | L1 / R1 |
+| Pause menu | P | Start (Options / +) |
+| Fullscreen | F | — |
 
 Review URL parameters: `?quality=high|low`, `?seed=N`, `?speed=slow|normal|fast|instant`, `?auto=human,bot,bank` (start a game immediately).
 
-Review screenshots: [docs/m0/](docs/m0/) (visual prototype), [docs/m2/](docs/m2/).
+Review screenshots: [docs/m0/](docs/m0/) (visual prototype), [docs/m2/](docs/m2/), [docs/m3/](docs/m3/).
 
 ## Stack
 

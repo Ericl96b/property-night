@@ -7,7 +7,7 @@
   import { deedInfo, focusTile, phasePrompt, primaryButtons } from '../present';
 
   let {
-    state,
+    gs,
     actions,
     busy,
     actingName,
@@ -15,7 +15,7 @@
     onaction,
     extra,
   }: {
-    state: State;
+    gs: State;
     actions: Action[];
     busy: boolean;
     actingName: string | null;
@@ -24,18 +24,18 @@
     extra?: import('svelte').Snippet;
   } = $props();
 
-  const tile = $derived(focusTile(state));
-  const deed = $derived(state.board.tiles[tile].price !== undefined ? deedInfo(state, tile) : null);
-  const buttons = $derived(primaryButtons(state, actions));
-  const log = $derived(state.log.slice(-5).reverse());
+  const tile = $derived(focusTile(gs));
+  const deed = $derived(gs.board.tiles[tile].price !== undefined ? deedInfo(gs, tile) : null);
+  const buttons = $derived(primaryButtons(gs, actions));
+  const log = $derived(gs.log.slice(-5).reverse());
 </script>
 
 <div class="panel context">
-  <div class="prompt">{phasePrompt(state)}</div>
+  <div class="prompt">{phasePrompt(gs)}</div>
   {#if deed}
     <div class="deed"><Deed {deed} scale={0.9} /></div>
   {:else}
-    <div class="tile-name">{state.board.tiles[tile].name}</div>
+    <div class="tile-name">{gs.board.tiles[tile].name}</div>
   {/if}
   {#if actingName && buttons.length}
     <div class="acting">{actingName}</div>

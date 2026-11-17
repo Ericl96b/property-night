@@ -190,7 +190,7 @@ export type GameEvent =
   | { type: 'bid'; seat: number; amount: number }
   | { type: 'passed'; seat: number }
   | { type: 'auctionEnded'; tile: number; winner: number | null; amount: number }
-  | { type: 'payment'; from: Creditor; to: Creditor; amount: number; reason: string; tile?: number }
+  | { type: 'payment'; from: Creditor; to: Creditor; amount: number; reason: string; tile?: number; cash: number[] }
   | { type: 'debtPending'; debt: Debt }
   | { type: 'cardDrawn'; seat: number; deck: 'chance' | 'chest'; index: number; text: string }
   | { type: 'built'; seat: number; tile: number; buildings: number }

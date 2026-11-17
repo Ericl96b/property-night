@@ -29,6 +29,7 @@ const KEYMAP: Record<string, Intent> = {
   KeyE: 'cycleRight',
   KeyN: 'nextPlayer',
   KeyF: 'fullscreen',
+  KeyP: 'pause',
   Tab: 'log',
 };
 
@@ -41,7 +42,7 @@ const PAD: Record<number, Intent> = {
   4: 'cycleLeft', // L1
   5: 'cycleRight', // R1
   8: 'log', // select / share / −
-  9: 'fullscreen', // start / options / +
+  9: 'pause', // start / options / +
   15: 'nextPlayer', // d-pad right
 };
 
