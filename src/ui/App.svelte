@@ -27,6 +27,7 @@
   let {
     controller,
     input,
+    presets,
     settings,
     onstart,
     onsetting,
@@ -35,8 +36,9 @@
   }: {
     controller: GameController;
     input: InputManager;
+    presets: import('../app/presets').RulesPresets;
     settings: Settings;
-    onstart: (seats: SeatConfig[], randomOrder: boolean) => void;
+    onstart: (seats: SeatConfig[], randomOrder: boolean, rulesId: string) => void;
     onsetting: (patch: Partial<Settings>) => void;
     onnewgame: () => void;
     onfullscreen: () => void;
@@ -331,13 +333,19 @@
 
 <div class="stage" style="transform: translate({offset.x}px, {offset.y}px) scale({scale})">
   {#if !started || !view || !gs}
-    <Setup {onstart} {input} {pads} />
+    <Setup {onstart} {input} {pads} {presets} />
   {:else}
     <PlayerCards players={players(gs)} {cashOverride} {shake} />
     <ContextPanel {gs} {actions} busy={view.busy} {actingName} error={view.error} onaction={act}>
       {#snippet extra()}
         {#if manageable && gs.phase !== 'debt'}
           <ActionButton label="Manage properties" glyph="manage" disabled={view!.busy} onclick={openManage} />
+        {/if}
+        {#if gs.phase === 'speedChoice' && gs.turn.speedChoice?.anyTile && actor === gs.turn.seat}
+          <select class="anytile" aria-label="Move to any space" onchange={(e) => act({ type: 'speedChoice', seat: gs.turn.seat, target: Number((e.currentTarget as HTMLSelectElement).value) })}>
+            <option value="">Triples! Choose any space…</option>
+            {#each gs.board.tiles as t}<option value={t.index}>{t.name}</option>{/each}
+          </select>
         {/if}
         {#if canPropose && actor === gs.turn.seat}
           <ActionButton label="Trade" glyph="trade" disabled={view!.busy} onclick={() => openTrade(gs.turn.seat)} />
@@ -485,6 +493,14 @@
   .pl-sub {
     font: 600 18px/1.4 'Source Sans 3', sans-serif;
     color: var(--ink-2);
+  }
+  .anytile {
+    height: 56px;
+    font: 600 18px 'Source Sans 3', sans-serif;
+    border-radius: 10px;
+    border: 1.5px solid rgba(43, 33, 25, 0.3);
+    padding: 0 10px;
+    background: #fff;
   }
   .menu img {
     width: 34px;

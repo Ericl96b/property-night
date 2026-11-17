@@ -27,6 +27,8 @@ export interface PlayerState {
   jail: JailState | null;
   gojf: DeckId[];
   bankrupt: boolean;
+  /** Has passed GO at least once (the speed die joins after the first lap). */
+  lapped: boolean;
   /** Stats for the end-of-game screen (M11). */
   stats: { rentPaid: number; rentReceived: number; auctionBuys: number; directBuys: number };
 }
@@ -54,20 +56,30 @@ export interface Debt {
 }
 
 export interface Auction {
+  /** Property auctions: the lot. Building auctions: the tile the requester wanted to build on. */
   tile: number;
   highBid: number;
   highBidder: number | null;
   /** Seats still allowed to bid. */
   active: number[];
   minBid: number;
+  /** Property (default) or a scarce building (shortage rule). */
+  kind?: 'property' | 'house' | 'hotel';
+  /** Building auctions: where each bidder would build if they win (seat → tile). */
+  buildFor?: Record<number, number>;
 }
+
+/** Speed die faces: 1–3 are numbers, 4 and 5 are the bus, 6 is the "Mr. Monopoly" face. */
+export type SpeedFace = 1 | 2 | 3 | 4 | 5 | 6;
+export const SPEED_BUS = (f: number) => f === 4 || f === 5;
+export const SPEED_MR = 6;
 
 export interface MortgagedTransfer {
   to: number;
   tiles: number[];
 }
 
-export type Phase = 'preRoll' | 'buy' | 'auction' | 'debt' | 'mortgagedTransfer' | 'trade' | 'postRoll' | 'gameOver';
+export type Phase = 'preRoll' | 'speedChoice' | 'buy' | 'auction' | 'debt' | 'mortgagedTransfer' | 'trade' | 'postRoll' | 'gameOver';
 
 export interface TradeSide {
   tiles: number[];
@@ -110,6 +122,12 @@ export interface TurnState {
   dice: [number, number] | null;
   /** Trade proposals made this turn. */
   trades: number;
+  /** Speed die face this roll (null when not rolled). */
+  speed?: number | null;
+  /** Pending speed-die decision: bus (choose a move) or triples (any tile). */
+  speedChoice?: { options: number[]; anyTile: boolean } | null;
+  /** "Mr. Monopoly" face: after this landing resolves, advance to the next property. */
+  mrMonopoly?: boolean;
 }
 
 export interface LogEntry {
@@ -167,6 +185,8 @@ export type Action =
   | { type: 'declareBankruptcy'; seat: number }
   | { type: 'forfeit'; seat: number }
   | { type: 'endTurn'; seat: number }
+  /** Speed die: move `steps` (bus) or go to `target` (triples). */
+  | { type: 'speedChoice'; seat: number; steps?: number; target?: number }
   | { type: 'proposeTrade'; seat: number; offer: TradeOffer }
   | { type: 'acceptTrade'; seat: number }
   | { type: 'rejectTrade'; seat: number }
@@ -180,7 +200,7 @@ export type ActionType = Action['type'];
 
 export type GameEvent =
   | { type: 'turnStarted'; seat: number }
-  | { type: 'diceRolled'; seat: number; dice: [number, number]; doubles: boolean }
+  | { type: 'diceRolled'; seat: number; dice: [number, number]; doubles: boolean; speed?: number }
   | { type: 'moved'; seat: number; from: number; to: number; steps: number; direct: boolean }
   | { type: 'passedGo'; seat: number; amount: number }
   | { type: 'jailed'; seat: number; reason: 'tile' | 'card' | 'doubles' }
@@ -189,7 +209,7 @@ export type GameEvent =
   | { type: 'auctionStarted'; tile: number; minBid: number }
   | { type: 'bid'; seat: number; amount: number }
   | { type: 'passed'; seat: number }
-  | { type: 'auctionEnded'; tile: number; winner: number | null; amount: number }
+  | { type: 'auctionEnded'; tile: number; winner: number | null; amount: number; kind?: 'property' | 'house' | 'hotel' }
   | { type: 'payment'; from: Creditor; to: Creditor; amount: number; reason: string; tile?: number; cash: number[] }
   | { type: 'debtPending'; debt: Debt }
   | { type: 'cardDrawn'; seat: number; deck: 'chance' | 'chest'; index: number; text: string }

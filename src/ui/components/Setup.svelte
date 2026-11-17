@@ -9,8 +9,32 @@
   import { PLAYER_COLORS, TOKEN_NAMES } from '../theme';
   import ActionButton from './ActionButton.svelte';
   import RemapDialog from './RemapDialog.svelte';
+  import RulesEditor from './RulesEditor.svelte';
+  import type { RulesPreset, RulesPresets } from '../../app/presets';
 
-  let { onstart, input, pads }: { onstart: (seats: SeatConfig[], randomOrder: boolean) => void; input: InputManager; pads: PadInfo[] } = $props();
+  let {
+    onstart,
+    input,
+    pads,
+    presets,
+  }: {
+    onstart: (seats: SeatConfig[], randomOrder: boolean, rulesId: string) => void;
+    input: InputManager;
+    pads: PadInfo[];
+    presets: RulesPresets;
+  } = $props();
+
+  let rulesId = $state('classic');
+  let rulesList = $state<RulesPreset[]>([]);
+  let editingRules = $state(false);
+  async function loadRules() {
+    rulesList = await presets.list();
+    if (!rulesList.some((p) => p.id === rulesId)) rulesId = 'classic';
+  }
+  $effect(() => {
+    void editingRules;
+    void loadRules();
+  });
 
   let seats = $state<SeatConfig[]>([
     { kind: 'human', name: 'Player 1', token: 'teacup', color: PLAYER_COLORS[0] },
@@ -99,6 +123,14 @@
     <button class="link" onclick={addSeat} disabled={seats.length >= 6}>+ Add seat</button>
     <label><input type="checkbox" bind:checked={randomOrder} /> Random turn order</label>
   </div>
+  <div class="opts">
+    <label>Rules
+      <select bind:value={rulesId} aria-label="Rules preset">
+        {#each rulesList as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+      </select>
+    </label>
+    <button class="link" onclick={() => (editingRules = true)}>Edit rules…</button>
+  </div>
 
   <div class="controllers">
     <div class="ch">Controllers <span class="hint">Press any button on a controller to join the next human seat.</span></div>
@@ -120,8 +152,11 @@
   </div>
 
   {#if problem}<div class="problem">{problem}</div>{/if}
-  <ActionButton label="Start game" glyph="confirm" primary disabled={!!problem} onclick={() => onstart($state.snapshot(seats), randomOrder)} />
+  <ActionButton label="Start game" glyph="confirm" primary disabled={!!problem} onclick={() => onstart($state.snapshot(seats), randomOrder, rulesId)} />
 </div>
+{#if editingRules}
+  <RulesEditor {presets} selectedId={rulesId} onselect={(id) => (rulesId = id)} onclose={() => (editingRules = false)} />
+{/if}
 {#if remapping}
   <RemapDialog {input} deviceId={remapping} onclose={() => (remapping = null)} />
 {/if}

@@ -196,7 +196,11 @@ export function chooseMedium(s: State, seat: number): Action | null {
     case 'auction': {
       const a = s.auction!;
       if (!a.active.includes(seat) || a.highBidder === seat) return null;
-      const limit = Math.min(valueEstimate(s, seat, a.tile), p.cash - Math.round(reserve(s, seat) * 0.5));
+      const worth =
+        a.kind === 'house' || a.kind === 'hotel'
+          ? Math.round((s.board.tiles[a.buildFor?.[seat] ?? a.tile].houseCost ?? 100) * 1.4)
+          : valueEstimate(s, seat, a.tile);
+      const limit = Math.min(worth, p.cash - Math.round(reserve(s, seat) * 0.5));
       const bids = bidOptions(s, seat).filter((x) => x <= limit);
       if (!bids.length) return { type: 'pass', seat };
       // Jump by $10 while far below the limit, otherwise the smallest raise.
@@ -220,6 +224,27 @@ export function chooseMedium(s: State, seat: number): Action | null {
       const canBuy = has('buy');
       if (canBuy && (p.cash - price >= res || (value > price * 1.3 && p.cash - price >= 50))) return canBuy;
       return has('decline') ?? null;
+    }
+    case 'speedChoice': {
+      if (s.turn.seat !== seat) return null;
+      const sc = s.turn.speedChoice!;
+      const pos = p.position;
+      const score = (tile: number) => {
+        const t = s.board.tiles[tile];
+        const ts = s.tiles[tile];
+        if (t.price !== undefined && ts.owner === null) return 1000 + valueEstimate(s, seat, tile);
+        if (ts.owner !== null && ts.owner !== seat && !ts.mortgaged) return -rentFor(s, tile, 7);
+        if (t.type === 'goToJail') return -500;
+        if (t.type === 'tax') return -200;
+        return 0;
+      };
+      if (sc.anyTile) {
+        let best = 0;
+        for (let t = 0; t < 40; t++) if (score(t) > score(best)) best = t;
+        return { type: 'speedChoice', seat, target: best };
+      }
+      const steps = [...sc.options].sort((x, y) => score((pos + y) % 40) - score((pos + x) % 40) || y - x)[0];
+      return { type: 'speedChoice', seat, steps };
     }
     case 'trade': {
       const o = s.trade!;

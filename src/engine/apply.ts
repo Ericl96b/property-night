@@ -1,7 +1,7 @@
 // apply(state, action) → { state, events } (SPEC §12). Pure and deterministic: the input state
 // is never mutated, all randomness comes from the seeded RNG stored in the state.
 import type { DeckId } from './cards';
-import { rollDie } from './rng';
+import { nextInt, rollDie } from './rng';
 import {
   buildBlocker,
   buildingCounts,
@@ -22,7 +22,7 @@ import {
 } from './queries';
 import { cloneState } from './state';
 import { validateOffer } from './trade';
-import { EngineError, type Action, type ApplyResult, type Creditor, type GameEvent, type State, type TradeOffer } from './types';
+import { EngineError, SPEED_BUS, SPEED_MR, type Action, type ApplyResult, type Creditor, type GameEvent, type State, type TradeOffer } from './types';
 
 interface Ctx {
   s: State;
@@ -96,6 +96,7 @@ function moveForward(c: Ctx, seat: number, steps: number, direct: boolean): numb
   const to = (from + steps) % 40;
   p.position = to;
   c.ev.push({ type: 'moved', seat, from, to, steps, direct });
+  if (from + steps >= 40) p.lapped = true;
   if (from + steps >= 40 && !isBankBot(c.s, seat)) {
     const amount = salaryFor(c, to === 0);
     credit(c, seat, amount);
@@ -303,6 +304,10 @@ function endAuction(c: Ctx): void {
   const s = c.s;
   const a = s.auction!;
   s.auction = null;
+  if (a.kind === 'house' || a.kind === 'hotel') {
+    endBuildingAuction(c, a);
+    return;
+  }
   if (a.highBidder !== null) {
     const w = a.highBidder;
     s.players[w].cash -= a.highBid;
@@ -318,6 +323,112 @@ function checkAuctionEnd(c: Ctx): void {
   const a = c.s.auction!;
   const othersLeft = a.active.filter((i) => i !== a.highBidder);
   if ((a.highBidder !== null && othersLeft.length === 0) || a.active.length === 0) endAuction(c);
+}
+
+// ---- scarce buildings: shortage auction (SPEC §5 "Shortage handling") -------------------------
+
+/** Would `seat` be able to build one `kind` somewhere right now (ignoring turn and timing)? Best tile or null. */
+function buildableTile(s: State, seat: number, kind: 'house' | 'hotel'): number | null {
+  let best: number | null = null;
+  let bestRent = -1;
+  for (const t of s.board.tiles) {
+    if (t.type !== 'street' || s.tiles[t.index].owner !== seat) continue;
+    const b = s.tiles[t.index].buildings;
+    if ((kind === 'hotel') !== (b === 4) || b >= 5) continue;
+    const g = groupTiles(s.board, t.group!);
+    if (!g.every((i) => s.tiles[i].owner === seat)) continue;
+    if (!s.rules.buildWithMortgagedInSet && g.some((i) => s.tiles[i].mortgaged)) continue;
+    if (s.rules.evenBuilding && b > Math.min(...g.map((i) => s.tiles[i].buildings))) continue;
+    if (s.players[seat].cash < (t.houseCost ?? 0)) continue;
+    const gain = t.rents![b + 1] - t.rents![b];
+    if (gain > bestRent) {
+      bestRent = gain;
+      best = t.index;
+    }
+  }
+  return best;
+}
+
+/** Start a building auction instead of building when supply is scarce; returns true if started. */
+function maybeShortageAuction(c: Ctx, seat: number, tile: number): boolean {
+  const s = c.s;
+  if (s.rules.shortageHandling !== 'auction') return false;
+  const kind: 'house' | 'hotel' = s.tiles[tile].buildings === 4 ? 'hotel' : 'house';
+  const supply = kind === 'hotel' ? s.bank.hotels : s.bank.houses;
+  const n = s.players.length;
+  const bidders: number[] = [];
+  const buildFor: Record<number, number> = {};
+  for (let k = 0; k < n; k++) {
+    const i = (seat + k) % n;
+    if (s.players[i].bankrupt || isBankBot(s, i)) continue;
+    const t = i === seat ? tile : buildableTile(s, i, kind);
+    if (t === null) continue;
+    bidders.push(i);
+    buildFor[i] = t;
+  }
+  if (bidders.length < 2 || supply >= bidders.length) return false;
+  s.auction = { tile, highBid: 0, highBidder: null, active: bidders, minBid: 1, kind, buildFor };
+  c.ev.push({ type: 'auctionStarted', tile, minBid: 1 });
+  log(c, seat, `Only ${supply} ${kind === 'hotel' ? 'hotel' : 'house'}${supply === 1 ? '' : 's'} left: the next one goes to auction`);
+  return true;
+}
+
+function placeBuilding(c: Ctx, seat: number, tile: number): void {
+  const s = c.s;
+  const ts = s.tiles[tile];
+  if (ts.buildings === 4) {
+    s.bank.hotels--;
+    s.bank.houses += 4;
+  } else s.bank.houses--;
+  ts.buildings++;
+  c.ev.push({ type: 'built', seat, tile, buildings: ts.buildings });
+  log(c, seat, `${name(c, seat)} built ${ts.buildings === 5 ? 'a hotel' : 'a house'} on ${tileName(c, tile)}`);
+}
+
+function endBuildingAuction(c: Ctx, a: NonNullable<State['auction']>): void {
+  const s = c.s;
+  const kind = a.kind as 'house' | 'hotel';
+  c.ev.push({ type: 'auctionEnded', tile: a.tile, winner: a.highBidder, amount: a.highBid, kind });
+  if (a.highBidder === null) {
+    log(c, null, `No bids: the ${kind} stays in the bank`);
+    return;
+  }
+  const w = a.highBidder;
+  // Build where the winner wanted, or anywhere still legal for them.
+  const wanted = a.buildFor?.[w];
+  const stillOk = wanted !== undefined && buildableTile({ ...s, players: s.players.map((p, i) => (i === w ? { ...p, cash: Infinity } : p)) }, w, kind) !== null;
+  const target = stillOk ? wanted! : null;
+  const supplyOk = kind === 'hotel' ? s.bank.hotels > 0 : s.bank.houses > 0;
+  if (target === null || !supplyOk) {
+    log(c, w, `${name(c, w)} won the ${kind} but can no longer place it; no charge`);
+    return;
+  }
+  s.players[w].cash -= a.highBid;
+  c.ev.push({ type: 'payment', cash: cashSnap(c), from: w, to: 'bank', amount: a.highBid, reason: `${kind} auction` });
+  log(c, w, `${name(c, w)} won a ${kind} at auction for $${a.highBid}`);
+  placeBuilding(c, w, target);
+}
+
+// ---- speed die (SPEC §5 "Speed die") -------------------------------------------------------------
+
+/** "Mr. Monopoly": advance to the next unowned property, else the next one where rent is due. */
+function mrMonopolyMove(c: Ctx, seat: number): void {
+  const s = c.s;
+  const pos = s.players[seat].position;
+  let target: number | null = null;
+  for (const wantUnowned of [true, false]) {
+    for (let k = 1; k < 40 && target === null; k++) {
+      const i = (pos + k) % 40;
+      const t = s.board.tiles[i];
+      if (!isOwnable(t)) continue;
+      const o = s.tiles[i].owner;
+      if (wantUnowned ? o === null : o !== null && o !== seat && !s.tiles[i].mortgaged && !s.players[o].bankrupt) target = i;
+    }
+    if (target !== null) break;
+  }
+  if (target === null) return;
+  log(c, seat, `${name(c, seat)} follows the speed die to ${tileName(c, target)}`);
+  landOn(c, seat, moveTo(c, seat, target));
 }
 
 // ---- bankruptcy and game end ----------------------------------------------------------------
@@ -465,7 +576,7 @@ function nextTurn(c: Ctx): void {
       break;
     }
   }
-  s.turn = { seat: next, doubles: 0, rolled: false, extraRoll: false, dice: null, trades: 0 };
+  s.turn = { seat: next, doubles: 0, rolled: false, extraRoll: false, dice: null, trades: 0, speed: null, speedChoice: null, mrMonopoly: false };
   s.turnNumber++;
   s.phase = 'preRoll';
   c.ev.push({ type: 'turnStarted', seat: next });
@@ -519,6 +630,15 @@ function advance(c: Ctx): void {
       nextTurn(c);
       continue;
     }
+    if (s.turn.speedChoice) {
+      s.phase = 'speedChoice';
+      return;
+    }
+    if (s.turn.mrMonopoly) {
+      s.turn.mrMonopoly = false;
+      if (!s.players[s.turn.seat].jail) mrMonopolyMove(c, s.turn.seat);
+      continue;
+    }
     if (s.turn.extraRoll) {
       s.turn.extraRoll = false;
       s.turn.rolled = false;
@@ -565,6 +685,32 @@ function doRoll(c: Ctx, seat: number): void {
   }
   s.turn.rolled = true;
   s.turn.extraRoll = doubles && s.rules.doublesExtraRoll;
+  if (s.rules.speedDie && p.lapped) {
+    const face = 1 + nextInt(s.rng, 6);
+    s.turn.speed = face;
+    // Annotate this roll's dice event with the speed die face (one throw, three dice).
+    const ev = [...c.ev].reverse().find((e) => e.type === 'diceRolled');
+    if (ev && ev.type === 'diceRolled') ev.speed = face;
+    if (face <= 3 && dice[0] === face && dice[1] === face) {
+      // Triples: move to any space; the turn then ends.
+      s.turn.extraRoll = false;
+      s.turn.speedChoice = { options: [], anyTile: true };
+      log(c, seat, `${name(c, seat)} rolled triples: move anywhere`);
+      return;
+    }
+    if (SPEED_BUS(face)) {
+      const options = [...new Set([dice[0], dice[1], total])].sort((x, y) => x - y);
+      s.turn.speedChoice = { options, anyTile: false };
+      log(c, seat, `${name(c, seat)} rolled the bus: choose a move`);
+      return;
+    }
+    if (face === SPEED_MR) s.turn.mrMonopoly = true;
+    else {
+      log(c, seat, `${name(c, seat)} adds ${face} from the speed die`);
+      landOn(c, seat, moveForward(c, seat, total + face, false));
+      return;
+    }
+  }
   landOn(c, seat, moveForward(c, seat, total, false));
 }
 
@@ -674,16 +820,9 @@ export function apply(state: State, action: Action): ApplyResult {
     case 'build': {
       const why = buildBlocker(s, seat, action.tile);
       if (why) fail(why);
-      const ts = s.tiles[action.tile];
-      const cost = s.board.tiles[action.tile].houseCost ?? 0;
-      s.players[seat].cash -= cost;
-      if (ts.buildings === 4) {
-        s.bank.hotels--;
-        s.bank.houses += 4;
-      } else s.bank.houses--;
-      ts.buildings++;
-      c.ev.push({ type: 'built', seat, tile: action.tile, buildings: ts.buildings });
-      log(c, seat, `${name(c, seat)} built ${ts.buildings === 5 ? 'a hotel' : 'a house'} on ${tileName(c, action.tile)}`);
+      if (maybeShortageAuction(c, seat, action.tile)) break;
+      s.players[seat].cash -= s.board.tiles[action.tile].houseCost ?? 0;
+      placeBuilding(c, seat, action.tile);
       break;
     }
     case 'sell': {
@@ -764,6 +903,22 @@ export function apply(state: State, action: Action): ApplyResult {
       if (isBankBot(s, seat)) fail('bank-backed bots cannot forfeit');
       log(c, seat, `${name(c, seat)} forfeited`);
       bankrupt(c, seat, 'bank');
+      break;
+    }
+    case 'speedChoice': {
+      requirePhase(s, 'speedChoice');
+      requireActive(s, seat);
+      const sc = s.turn.speedChoice!;
+      if (sc.anyTile) {
+        const target = action.target;
+        if (target === undefined || !Number.isInteger(target) || target < 0 || target > 39) fail('choose a space');
+        s.turn.speedChoice = null;
+        landOn(c, seat, s.players[seat].position === target ? target : moveTo(c, seat, target!));
+      } else {
+        if (action.steps === undefined || !sc.options.includes(action.steps)) fail('choose one of the bus moves');
+        s.turn.speedChoice = null;
+        landOn(c, seat, moveForward(c, seat, action.steps!, false));
+      }
       break;
     }
     case 'proposeTrade': {

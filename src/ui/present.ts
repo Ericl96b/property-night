@@ -96,6 +96,11 @@ export function actionLabel(s: State, a: Action): string {
       return 'Reject trade';
     case 'cancelTrade':
       return 'Cancel trade';
+    case 'speedChoice': {
+      const pos = s.players[a.seat].position;
+      if (a.target !== undefined) return `Go to ${tileName(s, a.target)}`;
+      return `Move ${a.steps} → ${tileName(s, (pos + (a.steps ?? 0)) % 40)}`;
+    }
     default:
       return a.type;
   }
@@ -103,9 +108,11 @@ export function actionLabel(s: State, a: Action): string {
 
 /** The main buttons for the current decision (manage actions live in the Manage screen). */
 export function primaryButtons(s: State, actions: Action[]): ActionButton[] {
-  const order: Action['type'][] = ['roll', 'buy', 'payJailFine', 'useJailCard', 'decline', 'endTurn', 'acceptTrade', 'rejectTrade', 'cancelTrade', 'declareBankruptcy'];
+  const order: Action['type'][] = ['roll', 'speedChoice', 'buy', 'payJailFine', 'useJailCard', 'decline', 'endTurn', 'acceptTrade', 'rejectTrade', 'cancelTrade', 'declareBankruptcy'];
   const out: ActionButton[] = [];
   for (const type of order) {
+    // "Move anywhere" (triples) uses a picker instead of 40 buttons.
+    if (type === 'speedChoice' && s.turn.speedChoice?.anyTile) continue;
     for (const a of actions.filter((x) => x.type === type)) {
       out.push({ action: a, label: actionLabel(s, a) });
     }
@@ -255,7 +262,9 @@ export function phasePrompt(s: State): string {
     case 'buy':
       return `${n(s.turn.seat)} landed on ${s.board.tiles[s.pendingBuy!].name}`;
     case 'auction':
-      return `Auction: ${s.board.tiles[s.auction!.tile].name}`;
+      return s.auction!.kind === 'house' || s.auction!.kind === 'hotel'
+        ? `Auction: the last ${s.auction!.kind === 'hotel' ? 'hotels' : 'houses'}`
+        : `Auction: ${s.board.tiles[s.auction!.tile].name}`;
     case 'debt': {
       const d = s.debts[0];
       return `${n(d.from)} owes ${money(d.amount)} — raise the money`;
@@ -264,6 +273,8 @@ export function phasePrompt(s: State): string {
       return `${n(s.transfers[0].to)} received mortgaged property`;
     case 'trade':
       return `${n(s.trade!.to)}: answer the trade from ${n(s.trade!.from)}`;
+    case 'speedChoice':
+      return s.turn.speedChoice?.anyTile ? `${n(s.turn.seat)} rolled triples — go anywhere` : `${n(s.turn.seat)} rolled the bus — choose a move`;
     case 'preRoll':
       return s.players[s.turn.seat].jail ? `${n(s.turn.seat)} is in jail` : `${n(s.turn.seat)} to roll`;
     case 'postRoll':

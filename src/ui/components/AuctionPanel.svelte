@@ -50,7 +50,18 @@
 <div class="panel auction">
   <div class="eyebrow">Auction</div>
   <div class="body">
-    <Deed deed={deedInfo(gs, a.tile)} scale={0.95} />
+    {#if a.kind === 'house' || a.kind === 'hotel'}
+      <div class="lot">
+        <div class="lk">{a.kind === 'hotel' ? 'Hotel' : 'House'}</div>
+        <div class="ln">Only {a.kind === 'hotel' ? gs.bank.hotels : gs.bank.houses} left in the bank</div>
+        <div class="lh">The highest bid buys it and builds right away:</div>
+        {#each a.active as i}
+          <div class="lt">{gs.seats[i].name} → {gs.board.tiles[a.buildFor?.[i] ?? a.tile].name}</div>
+        {/each}
+      </div>
+    {:else}
+      <Deed deed={deedInfo(gs, a.tile)} scale={0.95} />
+    {/if}
     <div class="mid">
       <div class="ring">
         <svg viewBox="0 0 120 120" width="190" height="190" aria-hidden="true">
@@ -128,6 +139,29 @@
     display: flex;
     gap: 36px;
     align-items: center;
+  }
+  .lot {
+    width: 285px;
+    min-height: 300px;
+    padding: 24px;
+    border-radius: 9px;
+    background: var(--paper);
+    box-shadow: inset 0 0 0 1.5px var(--ink);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .lk {
+    font: 800 40px/1 'Fraunces', serif;
+    color: var(--forest);
+  }
+  .ln,
+  .lh {
+    font: 600 16px/1.3 'Source Sans 3', sans-serif;
+    color: var(--ink-2);
+  }
+  .lt {
+    font: 700 17px/1.3 'Fraunces', serif;
   }
   .mid {
     flex: 1;

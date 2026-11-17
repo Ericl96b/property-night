@@ -14,6 +14,8 @@ import type { Speed } from './director/queue';
 import type { NewGameConfig, SeatConfig, State } from './engine';
 import { rollDie, seedRng } from './engine/rng';
 import App from './ui/App.svelte';
+import { openKV } from './storage/db';
+import { RulesPresets } from './app/presets';
 
 async function boot(): Promise<void> {
   const root = document.getElementById('app')!;
@@ -42,6 +44,8 @@ async function boot(): Promise<void> {
   controller = new GameController(director);
 
   const input = new InputManager(undefined, undefined, browserStore);
+  const kv = await openKV();
+  const presets = new RulesPresets(kv);
 
   const applySettings = () => {
     input.swapNintendo = settings.swapNintendo;
@@ -83,10 +87,13 @@ async function boot(): Promise<void> {
     props: {
       controller,
       input,
+      presets,
       settings,
-      onstart: (seats: SeatConfig[], randomOrder: boolean) => {
+      onstart: async (seats: SeatConfig[], randomOrder: boolean, rulesId: string) => {
         const seed = Number(params.get('seed') ?? Math.floor(Math.random() * 2 ** 31));
-        startGame({ seats, seed, turnOrder: randomOrder ? 'random' : 'fixed' });
+        // The game keeps its own copy of the rules (editing a preset never changes a game).
+        const rules = { ...(await presets.get(rulesId)).rules };
+        startGame({ seats, seed, rules, turnOrder: randomOrder ? 'random' : 'fixed' });
       },
       onsetting: async (patch: Partial<Settings>) => {
         const qualityChanged = patch.quality !== undefined && patch.quality !== settings.quality;

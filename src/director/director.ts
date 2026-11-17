@@ -220,7 +220,8 @@ export class Director implements DirectorLike {
         }
         case 'auctionEnded': {
           if (e.winner === null) break;
-          const sub = `${state.board.tiles[e.tile].name} for $${e.amount.toLocaleString('en-US')}`;
+          const what = e.kind === 'house' || e.kind === 'hotel' ? `A ${e.kind}` : state.board.tiles[e.tile].name;
+          const sub = `${what} for $${e.amount.toLocaleString('en-US')}`;
           q.push(this.momentAnim({ kind: 'banner', title: `${name(e.winner)} wins the auction`, subtitle: sub, seat: e.winner, tone: 'brass', duration: BANNER_TIME }));
           break;
         }

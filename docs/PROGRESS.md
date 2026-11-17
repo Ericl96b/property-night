@@ -24,7 +24,7 @@ This file is the hand-off log for unattended work. A resumed session reads it fi
 - [x] **M3** Auctions, building, mortgages, raise-money flow, bankruptcy, forfeit, big-payment moment. Done 2026-11-17.
 - [x] **M4** Controller layer: assignment screen, DS4Windows/Switch Pro mapping, per-seat ownership, simultaneous auction input. Done 2026-11-17 (verified with simulated pads; physical DS4/Switch check pending on the TV PC).
 - [x] **M5** Trades with promises (UI; engine support already exists). Done 2026-11-17.
-- [ ] **M6** Rules editor + rules presets; every §5 setting wired and tested.
+- [x] **M6** Rules editor + rules presets; every §5 setting wired and tested. Done 2026-11-17 (loan settings wired with M7).
 - [ ] **M7** Bank loans.
 - [ ] **M8** Board and card editors + board presets (texture regeneration).
 - [ ] **M9** Save slots, autosave, resume, export/import, undo, game log.

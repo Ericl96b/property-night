@@ -100,6 +100,14 @@ export function legalActions(s: State, seat: number): Action[] {
       out.push(...manageActions(s, seat));
       break;
     }
+    case 'speedChoice': {
+      if (active) {
+        const sc = s.turn.speedChoice!;
+        if (sc.anyTile) for (let t = 0; t < 40; t++) out.push({ type: 'speedChoice', seat, target: t });
+        else for (const steps of sc.options) out.push({ type: 'speedChoice', seat, steps });
+      }
+      break;
+    }
     case 'trade': {
       // proposeTrade and counterTrade carry an offer, so they are built by the UI or bot.
       const t = s.trade!;
