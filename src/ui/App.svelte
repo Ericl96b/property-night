@@ -10,6 +10,7 @@
   import { moveFocus, type Dir } from './focus';
   import LogPanel from './components/LogPanel.svelte';
   import TradePanel from './components/TradePanel.svelte';
+  import LoanPanel from './components/LoanPanel.svelte';
   import { counterOf, partners } from './trade';
   import type { TradeOffer } from '../engine';
   import PlayerCards from './components/PlayerCards.svelte';
@@ -59,6 +60,7 @@
   let logOpen = $state(false);
   let waitingSeat = $state<number | null>(null);
   let navFocus = false;
+  let loanSeat = $state<number | null>(null);
   let compose = $state<{ seat: number; initial: TradeOffer | null; counter: boolean } | null>(null);
   const glyphCtx = $state({ family: 'playstation' as 'playstation' | 'nintendo', swap: false });
   setContext('glyphs', glyphCtx);
@@ -172,7 +174,7 @@
     return amt <= gs!.players[seat].cash ? amt : null;
   }
 
-  const PANELS = ['.remap', '.pause', '.padlost', '.logp', '.trade', '.manage', '.auction', '.setup', '.context', '.banner'];
+  const PANELS = ['.remap', '.pause', '.padlost', '.logp', '.loans', '.trade', '.manage', '.auction', '.setup', '.context', '.banner'];
   function topPanel(): Element | null {
     const stage = document.querySelector('.stage');
     if (!stage) return null;
@@ -295,6 +297,10 @@
       if (i === 'back') compose = null;
       return true;
     }
+    if (loanSeat !== null) {
+      if (i === 'back') loanSeat = null;
+      return true;
+    }
     if (gs.phase === 'trade') {
       const t = gs.trade!;
       if (seat === t.to && gs.seats[seat].kind === 'human') {
@@ -347,6 +353,9 @@
             {#each gs.board.tiles as t}<option value={t.index}>{t.name}</option>{/each}
           </select>
         {/if}
+        {#if gs.rules.loans && actor === gs.turn.seat && ['preRoll', 'postRoll', 'buy'].includes(gs.phase) && gs.seats[gs.turn.seat].kind === 'human'}
+          <ActionButton label="Bank loans" disabled={view!.busy} onclick={() => (loanSeat = gs.turn.seat)} />
+        {/if}
         {#if canPropose && actor === gs.turn.seat}
           <ActionButton label="Trade" glyph="trade" disabled={view!.busy} onclick={() => openTrade(gs.turn.seat)} />
         {/if}
@@ -377,7 +386,10 @@
       {/if}
     {/if}
     {#if panelSeat !== null && !view.busy}
-      <ManagePanel {gs} seat={panelSeat} busy={view.busy} onaction={act} onclose={() => (manageSeat = null)} />
+      <ManagePanel {gs} seat={panelSeat} busy={view.busy} onaction={act} onclose={() => (manageSeat = null)} onloan={() => (loanSeat = panelSeat)} />
+    {/if}
+    {#if loanSeat !== null && !view.busy}
+      <LoanPanel {gs} seat={loanSeat} onaction={(a) => { const err = controller.dispatch(a); if (!err && a.type === 'takeLoan') loanSeat = null; }} onclose={() => (loanSeat = null)} />
     {/if}
     {#if logOpen}
       <LogPanel {gs} onclose={() => (logOpen = false)} />

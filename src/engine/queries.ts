@@ -143,6 +143,7 @@ export function buildBlocker(s: State, seat: number, tile: number): string | nul
   if (!s.rules.buildWithMortgagedInSet && group.some((i) => s.tiles[i].mortgaged)) return 'a lot in the set is mortgaged';
   if (ts.mortgaged) return 'mortgaged';
   if (ts.buildings >= 5) return 'already has a hotel';
+  if (s.rules.noBuildWithLoan && s.players[seat].loans.length) return 'no building while a loan is unpaid';
   if (s.rules.evenBuilding) {
     const min = Math.min(...group.map((i) => s.tiles[i].buildings));
     if (ts.buildings > min) return 'build evenly across the set';
@@ -172,6 +173,7 @@ export function mortgageBlocker(s: State, seat: number, tile: number): string | 
   if (!managePhaseOk(s, seat)) return 'not now';
   if (ts.owner !== seat) return 'not yours';
   if (ts.mortgaged) return 'already mortgaged';
+  if (s.players.some((p) => p.loans.some((l) => l.collateral.includes(tile)))) return 'pledged to a loan';
   if (groupHasBuildings(s, tile)) return 'sell the buildings in this set first';
   return null;
 }

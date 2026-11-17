@@ -1,6 +1,7 @@
 // Presentation helpers for the overlay: labels, deed data, money. Typed TS so the Svelte
 // components stay thin.
 import {
+  borrowCapacity,
   buildBlocker,
   buildingCounts,
   buildingSellValue,
@@ -96,6 +97,10 @@ export function actionLabel(s: State, a: Action): string {
       return 'Reject trade';
     case 'cancelTrade':
       return 'Cancel trade';
+    case 'takeLoan':
+      return `Borrow ${money(a.amount)}`;
+    case 'repayLoan':
+      return `Pay ${money(a.amount)} off a loan`;
     case 'speedChoice': {
       const pos = s.players[a.seat].position;
       if (a.target !== undefined) return `Go to ${tileName(s, a.target)}`;
@@ -308,6 +313,7 @@ export interface ManageRow {
   color: string;
   buildings: number;
   mortgaged: boolean;
+  pledged: boolean;
   ops: ManageOp[];
 }
 
@@ -358,7 +364,8 @@ export function manageGroups(s: State, seat: number): ManageGroup[] {
       const m = mortgageBlocker(s, seat, tile);
       ops.push({ action: { type: 'mortgage', seat, tile }, label: `Mortgage +${money(mortgageValue(s, tile))}`, ok: !m, reason: m });
     }
-    groups.get(key)!.rows.push({ tile, name: t.name, color, buildings: ts.buildings, mortgaged: ts.mortgaged, ops });
+    const pledged = s.players.some((p) => p.loans.some((l) => l.collateral.includes(tile)));
+    groups.get(key)!.rows.push({ tile, name: t.name, color, buildings: ts.buildings, mortgaged: ts.mortgaged, pledged, ops });
   }
   return [...groups.values()];
 }
@@ -379,6 +386,6 @@ export function debtInfo(s: State): DebtInfo | null {
     amount: d.amount,
     to: d.to === 'bank' ? 'the bank' : s.seats[d.to].name,
     cash: s.players[d.from].cash,
-    canCover: liquidationValue(s, d.from) >= d.amount,
+    canCover: liquidationValue(s, d.from) + borrowCapacity(s, d.from) >= d.amount,
   };
 }

@@ -65,6 +65,19 @@ export function checkInvariants(s: State): string[] {
   // A bankrupt active seat is fine while its estate resolves (auctions, transfers, debts).
   if (s.players[s.turn.seat].bankrupt && ['preRoll', 'buy', 'postRoll', 'trade'].includes(s.phase)) errors.push('active seat is bankrupt');
   if (s.phase === 'trade' && !s.trade) errors.push('trade phase without an offer');
+  const pledged = new Set<number>();
+  s.players.forEach((p, i) => {
+    if (p.bankrupt && p.loans.length) errors.push(`bankrupt seat ${i} still has loans`);
+    for (const l of p.loans) {
+      if (l.principal <= 0) errors.push(`seat ${i} loan ${l.id} has no principal left`);
+      for (const t of l.collateral) {
+        if (s.tiles[t].owner !== i) errors.push(`pledged tile ${t} not owned by the borrower`);
+        if (s.tiles[t].mortgaged) errors.push(`pledged tile ${t} is mortgaged`);
+        if (pledged.has(t)) errors.push(`tile ${t} pledged twice`);
+        pledged.add(t);
+      }
+    }
+  });
   for (const pr of s.promises) {
     if (s.tiles[pr.tileId].owner !== pr.from) errors.push(`promise ${pr.id} survives an owner change`);
     if (pr.turnsLeft <= 0) errors.push(`promise ${pr.id} expired but kept`);

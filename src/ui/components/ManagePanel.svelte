@@ -10,7 +10,8 @@
     busy,
     onaction,
     onclose,
-  }: { gs: State; seat: number; busy: boolean; onaction: (a: Action) => void; onclose: () => void } = $props();
+    onloan,
+  }: { gs: State; seat: number; busy: boolean; onaction: (a: Action) => void; onclose: () => void; onloan?: () => void } = $props();
 
   const groups = $derived(manageGroups(gs, seat));
   const debt = $derived(debtInfo(gs));
@@ -44,6 +45,7 @@
             <div class="bld">
               {#if r.buildings === 5}<span class="hotel">HOTEL</span>{:else}{#each Array(r.buildings) as _}<span class="house"></span>{/each}{/if}
               {#if r.mortgaged}<span class="m">M</span>{/if}
+              {#if r.pledged}<span class="lock" title="Pledged to a loan">LOAN</span>{/if}
             </div>
             <div class="ops">
               {#each r.ops as op (op.label)}
@@ -56,6 +58,9 @@
     {/each}
   </div>
   <div class="foot">
+    {#if raising && gs.rules.loans && onloan}
+      <ActionButton label="Take a bank loan" glyph="trade" onclick={onloan} />
+    {/if}
     {#if raising && debt && !debt.canCover}
       <ActionButton label="Declare bankruptcy" glyph="confirm" onclick={() => onaction({ type: 'declareBankruptcy', seat })} />
     {/if}
@@ -184,6 +189,14 @@
     color: var(--oxblood);
     border: 1.5px solid var(--oxblood);
     padding: 1px 4px;
+  }
+  .lock {
+    font: 800 11px/1 'Source Sans 3', sans-serif;
+    letter-spacing: 1px;
+    padding: 3px 5px;
+    border-radius: 3px;
+    background: var(--ink);
+    color: var(--brass);
   }
   .ops {
     display: flex;

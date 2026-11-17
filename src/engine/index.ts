@@ -4,6 +4,7 @@ export { legalActions, manageActions, bidOptions, seatsToAct, BID_INCREMENTS } f
 export { newGame, cloneState, sidesFor, type NewGameConfig, type SeatConfig } from './state';
 export { checkInvariants } from './invariants';
 export { validateOffer, tradeTileBlocker } from './trade';
+export * from './loans';
 export { CLASSIC_RULES, type Rules } from './rules';
 export { CLASSIC_CHANCE, CLASSIC_CHEST, type Card, type CardEffect, type DeckId } from './cards';
 export * from './queries';

@@ -21,6 +21,18 @@ export interface JailState {
   attempts: number;
 }
 
+export interface Loan {
+  id: number;
+  /** Remaining principal. */
+  principal: number;
+  /** Interest per GO pass, % of remaining principal (fixed when the loan is taken). */
+  rate: number;
+  passesLeft: number;
+  /** Pledged tiles (empty = unsecured). */
+  collateral: number[];
+  secured: boolean;
+}
+
 export interface PlayerState {
   cash: number;
   position: number;
@@ -29,6 +41,7 @@ export interface PlayerState {
   bankrupt: boolean;
   /** Has passed GO at least once (the speed die joins after the first lap). */
   lapped: boolean;
+  loans: Loan[];
   /** Stats for the end-of-game screen (M11). */
   stats: { rentPaid: number; rentReceived: number; auctionBuys: number; directBuys: number };
 }
@@ -160,6 +173,7 @@ export interface State {
   trade: TradeOffer | null;
   promises: GamePromise[];
   nextPromiseId: number;
+  nextLoanId: number;
   winner: number | null;
   log: LogEntry[];
   rng: RngState;
@@ -185,6 +199,8 @@ export type Action =
   | { type: 'declareBankruptcy'; seat: number }
   | { type: 'forfeit'; seat: number }
   | { type: 'endTurn'; seat: number }
+  | { type: 'takeLoan'; seat: number; amount: number; passes: number; collateral: number[] }
+  | { type: 'repayLoan'; seat: number; loanId: number; amount: number }
   /** Speed die: move `steps` (bus) or go to `target` (triples). */
   | { type: 'speedChoice'; seat: number; steps?: number; target?: number }
   | { type: 'proposeTrade'; seat: number; offer: TradeOffer }
@@ -219,6 +235,9 @@ export type GameEvent =
   | { type: 'unmortgaged'; seat: number; tile: number }
   | { type: 'propertyTransferred'; tile: number; from: number | null; to: number | null }
   | { type: 'bankrupt'; seat: number; creditor: Creditor }
+  | { type: 'loanTaken'; seat: number; loan: Loan }
+  | { type: 'loanPaid'; seat: number; loanId: number; principal: number; interest: number; closed: boolean }
+  | { type: 'loanSeized'; seat: number; loanId: number; tiles: number[]; value: number; balance: number }
   | { type: 'tradeProposed'; offer: TradeOffer }
   | { type: 'tradeAccepted'; offer: TradeOffer }
   | { type: 'tradeRejected'; offer: TradeOffer }

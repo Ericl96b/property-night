@@ -8,6 +8,7 @@ import type { State, TradeOffer, TradeSide } from './types';
 export function tradeTileBlocker(s: State, tile: number): string | null {
   if (!isOwnable(s.board.tiles[tile])) return 'not a property';
   if (groupHasBuildings(s, tile)) return 'sell the buildings in this set first';
+  if (s.players.some((p) => p.loans.some((l) => l.collateral.includes(tile)))) return 'pledged to a loan';
   return null;
 }
 

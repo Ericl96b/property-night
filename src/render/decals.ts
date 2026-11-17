@@ -41,6 +41,29 @@ function stampTexture(): THREE.CanvasTexture {
   return t;
 }
 
+function lockTexture(): THREE.CanvasTexture {
+  const s = 128;
+  const c = makeCanvas(s, s);
+  const ctx = c.getContext('2d')!;
+  ctx.strokeStyle = '#2B2119';
+  ctx.lineWidth = 12;
+  ctx.beginPath();
+  ctx.arc(64, 52, 24, Math.PI, 0);
+  ctx.stroke();
+  ctx.fillStyle = '#2B2119';
+  ctx.beginPath();
+  ctx.roundRect(28, 52, 72, 58, 8);
+  ctx.fill();
+  ctx.fillStyle = '#C39445';
+  ctx.beginPath();
+  ctx.arc(64, 76, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(60, 80, 8, 18);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 function ribbonTexture(): THREE.CanvasTexture {
   const w = 256;
   const h = 256;
@@ -87,6 +110,8 @@ export class Decals {
   private owners = new Map<number, THREE.Mesh>();
   private mortgaged = new Map<number, THREE.Group>();
   private promises = new Map<number, THREE.Mesh>();
+  private locks = new Map<number, THREE.Mesh>();
+  private lockMat = new THREE.MeshStandardMaterial({ map: lockTexture(), transparent: true, alphaTest: 0.05, roughness: 0.5, polygonOffset: true, polygonOffsetFactor: -2 });
   private desatMat: THREE.MeshStandardMaterial;
 
   constructor(boardTexture: THREE.Texture) {
@@ -160,6 +185,24 @@ export class Decals {
     g.add(sm);
     this.group.add(g);
     this.mortgaged.set(tile, g);
+  }
+
+  /** Pledged to a bank loan (SPEC §7): small padlock at the tile's outer edge. */
+  setPledged(tile: number, on: boolean): void {
+    if (this.locks.has(tile) === on) return;
+    const old = this.locks.get(tile);
+    if (old) this.group.remove(old);
+    this.locks.delete(tile);
+    if (!on) return;
+    const f = tileFrame(tile);
+    const geo = new THREE.PlaneGeometry(0.014, 0.014);
+    geo.rotateX(-Math.PI / 2);
+    geo.rotateY(tileYaw(f));
+    const [x, z] = tileLocalToWorld(f, -TILE_W_PX / 2 + 11, OWNER_DISC_LY - 10);
+    geo.translate(x, BOARD_TOP + LIFT * 2, z);
+    const m = new THREE.Mesh(geo, this.lockMat);
+    this.group.add(m);
+    this.locks.set(tile, m);
   }
 
   setPromise(tile: number, on: boolean): void {

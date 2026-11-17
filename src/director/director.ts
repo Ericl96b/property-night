@@ -218,6 +218,10 @@ export class Director implements DirectorLike {
           q.push(this.momentAnim(m, e.tile));
           break;
         }
+        case 'loanSeized': {
+          q.push(this.momentAnim({ kind: 'banner', title: `${name(e.seat)} missed a loan payment`, subtitle: `The bank seized ${e.tiles.map((t) => state.board.tiles[t].name).join(', ')}`, seat: e.seat, tone: 'oxblood', duration: BANNER_TIME }));
+          break;
+        }
         case 'auctionEnded': {
           if (e.winner === null) break;
           const what = e.kind === 'house' || e.kind === 'hotel' ? `A ${e.kind}` : state.board.tiles[e.tile].name;
@@ -255,6 +259,7 @@ export class Director implements DirectorLike {
       sc.decals.setOwner(i, ts.owner === null ? null : state.seats[ts.owner].color);
       sc.decals.setMortgaged(i, ts.mortgaged);
       sc.decals.setPromise(i, state.promises.some((p) => p.tileId === i));
+      sc.decals.setPledged(i, state.players.some((p) => p.loans.some((l) => l.collateral.includes(i))));
       const cur = sc.buildings.countOn(i);
       const want = { houses: ts.buildings === 5 ? 0 : ts.buildings, hotel: ts.buildings === 5 };
       if (cur.houses !== want.houses || cur.hotel !== want.hotel) sc.buildings.set(i, want.houses, want.hotel);

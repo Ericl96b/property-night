@@ -22,6 +22,7 @@ import {
 } from './queries';
 import { cloneState } from './state';
 import { validateOffer } from './trade';
+import { borrowCapacity, installment, loanBlocker, seizureValue } from './loans';
 import { EngineError, SPEED_BUS, SPEED_MR, type Action, type ApplyResult, type Creditor, type GameEvent, type State, type TradeOffer } from './types';
 
 interface Ctx {
@@ -102,6 +103,7 @@ function moveForward(c: Ctx, seat: number, steps: number, direct: boolean): numb
     credit(c, seat, amount);
     c.ev.push({ type: 'passedGo', seat, amount });
     log(c, seat, `${name(c, seat)} collected $${amount} at GO`);
+    repayAtGo(c, seat);
   }
   return to;
 }
@@ -325,6 +327,58 @@ function checkAuctionEnd(c: Ctx): void {
   if ((a.highBidder !== null && othersLeft.length === 0) || a.active.length === 0) endAuction(c);
 }
 
+// ---- bank loans (SPEC §7) ---------------------------------------------------------------------
+
+/** Passing or landing on GO: salary first (done by the caller), then each loan's installment. */
+function repayAtGo(c: Ctx, seat: number): void {
+  const s = c.s;
+  const p = s.players[seat];
+  for (const loan of [...p.loans]) {
+    const due = installment(loan);
+    if (p.cash >= due.total) {
+      p.cash -= due.total;
+      loan.principal -= due.principal;
+      loan.passesLeft -= 1;
+      const closed = loan.principal <= 0;
+      if (closed) p.loans = p.loans.filter((l) => l !== loan);
+      c.ev.push({ type: 'payment', cash: cashSnap(c), from: seat, to: 'bank', amount: due.total, reason: 'loan installment' });
+      c.ev.push({ type: 'loanPaid', seat, loanId: loan.id, principal: due.principal, interest: due.interest, closed });
+      log(c, seat, `${name(c, seat)} paid a $${due.total} loan installment${closed ? ' and closed the loan' : ''}`);
+      continue;
+    }
+    // Missed payment.
+    p.loans = p.loans.filter((l) => l !== loan);
+    if (loan.secured) {
+      const balance = loan.principal + due.interest;
+      let value = 0;
+      for (const t of loan.collateral) {
+        value += seizureValue(s, t);
+        const ts = s.tiles[t];
+        if (ts.buildings === 5) s.bank.hotels++;
+        else s.bank.houses += ts.buildings;
+        ts.buildings = 0;
+        ts.owner = null;
+        ts.mortgaged = false;
+        c.ev.push({ type: 'propertyTransferred', tile: t, from: seat, to: null });
+        if (s.rules.seizedPropertyTo === 'auction') s.auctionQueue.push(t);
+      }
+      c.ev.push({ type: 'loanSeized', seat, loanId: loan.id, tiles: [...loan.collateral], value, balance });
+      log(c, seat, `${name(c, seat)} missed a loan payment: the bank seized ${loan.collateral.map((t) => tileName(c, t)).join(', ')}`);
+      if (value > balance) {
+        credit(c, seat, value - balance);
+        c.ev.push({ type: 'payment', cash: cashSnap(c), from: 'bank', to: seat, amount: value - balance, reason: 'seizure refund' });
+      } else if (value < balance) addDebt(c, seat, 'bank', balance - value, 'loan shortfall');
+    } else {
+      // Unsecured: the installment is owed to the bank like unpaid rent.
+      loan.principal -= due.principal;
+      loan.passesLeft -= 1;
+      if (loan.principal > 0) p.loans.push(loan);
+      addDebt(c, seat, 'bank', due.total, 'loan installment');
+      log(c, seat, `${name(c, seat)} cannot cover a $${due.total} loan installment`);
+    }
+  }
+}
+
 // ---- scarce buildings: shortage auction (SPEC §5 "Shortage handling") -------------------------
 
 /** Would `seat` be able to build one `kind` somewhere right now (ignoring turn and timing)? Best tile or null. */
@@ -471,6 +525,7 @@ function bankrupt(c: Ctx, seat: number, creditor: Creditor): void {
   p.cash = 0;
   p.gojf = [];
   p.jail = null;
+  p.loans = [];
   p.bankrupt = true;
   s.debts = s.debts.filter((d) => d.from !== seat && d.to !== seat);
   s.transfers = s.transfers.filter((t) => t.to !== seat);
@@ -895,7 +950,7 @@ export function apply(state: State, action: Action): ApplyResult {
       requirePhase(s, 'debt');
       const d = s.debts[0];
       if (d.from !== seat) fail('no debt to declare against');
-      if (liquidationValue(s, seat) >= d.amount) fail('you can still raise the money');
+      if (liquidationValue(s, seat) + borrowCapacity(s, seat) >= d.amount) fail('you can still raise the money');
       bankrupt(c, seat, d.to);
       break;
     }
@@ -903,6 +958,36 @@ export function apply(state: State, action: Action): ApplyResult {
       if (isBankBot(s, seat)) fail('bank-backed bots cannot forfeit');
       log(c, seat, `${name(c, seat)} forfeited`);
       bankrupt(c, seat, 'bank');
+      break;
+    }
+    case 'takeLoan': {
+      const own = s.turn.seat === seat && (s.phase === 'preRoll' || s.phase === 'postRoll' || s.phase === 'buy');
+      const debtor = s.phase === 'debt' && s.debts[0].from === seat;
+      if (!own && !debtor) fail('loans are taken on your own turn');
+      const why = loanBlocker(s, seat, action.amount, action.passes, action.collateral);
+      if (why) fail(why);
+      const loan = { id: s.nextLoanId++, principal: action.amount, rate: s.rules.loanInterestPercent, passesLeft: action.passes, collateral: [...action.collateral], secured: action.collateral.length > 0 };
+      s.players[seat].loans.push(loan);
+      s.players[seat].cash += action.amount;
+      c.ev.push({ type: 'loanTaken', seat, loan: { ...loan, collateral: [...loan.collateral] } });
+      c.ev.push({ type: 'payment', cash: cashSnap(c), from: 'bank', to: seat, amount: action.amount, reason: 'bank loan' });
+      log(c, seat, `${name(c, seat)} borrowed $${action.amount} over ${action.passes} GO passes${loan.secured ? ' (secured)' : ''}`);
+      break;
+    }
+    case 'repayLoan': {
+      if (s.turn.seat !== seat || !['preRoll', 'postRoll', 'buy'].includes(s.phase)) fail('early payoff is on your own turn');
+      const loan = s.players[seat].loans.find((l) => l.id === action.loanId);
+      if (!loan) fail('no such loan');
+      const amt = action.amount;
+      if (!Number.isInteger(amt) || amt <= 0 || amt > loan!.principal) fail('pay between $1 and the remaining principal');
+      if (amt > s.players[seat].cash) fail('not enough cash');
+      s.players[seat].cash -= amt;
+      loan!.principal -= amt;
+      const closed = loan!.principal <= 0;
+      if (closed) s.players[seat].loans = s.players[seat].loans.filter((l) => l !== loan);
+      c.ev.push({ type: 'payment', cash: cashSnap(c), from: seat, to: 'bank', amount: amt, reason: 'loan payoff' });
+      c.ev.push({ type: 'loanPaid', seat, loanId: loan!.id, principal: amt, interest: 0, closed });
+      log(c, seat, `${name(c, seat)} paid $${amt} off a loan${closed ? ' and closed it' : ''}`);
       break;
     }
     case 'speedChoice': {

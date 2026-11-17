@@ -11,6 +11,7 @@ import {
   unmortgageCost,
 } from './queries';
 import type { Action, State } from './types';
+import { borrowCapacity } from './loans';
 
 export const BID_INCREMENTS = [1, 10, 50, 100];
 
@@ -71,7 +72,7 @@ export function legalActions(s: State, seat: number): Action[] {
       const d = s.debts[0];
       if (d.from === seat) {
         out.push(...manageActions(s, seat));
-        if (liquidationValue(s, seat) < d.amount) out.push({ type: 'declareBankruptcy', seat });
+        if (liquidationValue(s, seat) + borrowCapacity(s, seat) < d.amount) out.push({ type: 'declareBankruptcy', seat });
       }
       break;
     }
