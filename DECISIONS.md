@@ -122,3 +122,12 @@ Where SPEC.md is silent, the decision taken is recorded here (SPEC §0).
 - **Pledged properties** show a padlock on the board and a LOAN tag in Manage; they still collect rent, can be built on (unless "No building while a loan is unpaid" is on, which blocks all building for a borrower), and cannot be traded or mortgaged.
 - **Bankruptcy check counts borrowing:** "Declare bankruptcy" appears only when selling, mortgaging and the extra cash a loan could add would still not cover the debt.
 - Bankruptcy and forfeit cancel loans; bank-backed and normal bots never borrow.
+
+## Milestone 8 — board and card editors, board presets (2026-11-17)
+
+- **Board presets** (IndexedDB) hold the board and both decks. "Classic board" is built in and read-only; user presets support duplicate, rename, delete, export/import JSON (`property-night/board`). The classic 40-tile layout and tile types are fixed (SPEC §8); everything printed or priced is editable: names, prices, rent tables, house costs, mortgage values, group colors (+ light/dark band text), railroad rents, utility multipliers, board title and subtitle.
+- **Group scaling** is an action ("Scale 150% → Apply") that rewrites the group's prices, rents, house costs and mortgages, so per-tile overrides stay editable afterwards.
+- **Validation** warns (does not block) on non-increasing rents, mortgage above price and duplicate names. Imports are normalized and clamped like rules presets.
+- **Tax amounts** belong to the rules (§5), so the board editor only renames tax tiles. The printed board follows the game's rules: GO salary and tax lines ("Pay $200", "Pay 10%", or "$200 or 10%").
+- **Cards:** text + one effect from the SPEC list; at most one Get Out of Jail Free card per deck (extra ones are dropped); an empty deck falls back to Classic. "Move to" card text can contain `{tile}`, which prints the target's current name, so renamed boards stay consistent (the default cards use it).
+- **Texture regeneration:** the board face is redrawn at game start only when the printed board differs from the current texture (board preset or rules changed). It never redraws during play.
