@@ -2,11 +2,9 @@
 
 This file is the hand-off log for unattended work. A resumed session reads it first, continues the first unchecked milestone, and updates it as it goes.
 
-## STATUS: WAITING FOR THE OWNER (2026-11-17)
-
-The owner asked to stop after M9 and resume from a new Claude Code session using `docs/HANDOFF.md`. **Unattended sessions must do nothing** until the owner removes this section. (The scheduled auto-resume task was deleted on 2026-11-17.)
-
 ## Owner instructions (2026-11-17)
+
+- Resumed at M10 on the owner's request (2026-11-17): build M10 and M11 unattended until all milestones are complete.
 
 - Milestone 0 was approved on 2026-11-17.
 - After M1 passes all checks, build **M2 → M11 unattended** in SPEC §14 order, as long as every check passes.
@@ -32,7 +30,7 @@ The owner asked to stop after M9 and resume from a new Claude Code session using
 - [x] **M7** Bank loans. Done 2026-11-17.
 - [x] **M8** Board and card editors + board presets (texture regeneration). Done 2026-11-17.
 - [x] **M9** Save slots, autosave, resume, export/import, undo, game log. Done 2026-11-17.
-- [ ] **M10** Bots (medium + bank-backed) in the lobby.
+- [x] **M10** Bots (medium + bank-backed) in the lobby. Done 2026-11-17: turn order Random / As listed with reordering, bot badges and descriptions, a log line for every action, game-over wording for the §3 win rules; mixed human/bot/bank-bot controller test.
 - [ ] **M11** Polish: sounds, stats screen, speed settings, reduce motion, performance pass.
 
 ## Notes for the next session

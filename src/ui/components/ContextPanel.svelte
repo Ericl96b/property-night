@@ -32,7 +32,9 @@
 
 <div class="panel context">
   <div class="prompt">{phasePrompt(gs)}</div>
-  {#if deed}
+  {#if gs.phase === 'gameOver'}
+    <!-- The banner says it all; no current tile once the game is over. -->
+  {:else if deed}
     <div class="deed"><Deed {deed} scale={0.9} /></div>
   {:else}
     <div class="tile-name">{gs.board.tiles[tile].name}</div>

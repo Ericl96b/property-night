@@ -25,7 +25,7 @@
   import PauseMenu from './components/PauseMenu.svelte';
   import MomentLayer from './components/MomentLayer.svelte';
   import ActionButton from './components/ActionButton.svelte';
-  import { players, primaryButtons } from './present';
+  import { gameOverText, players, primaryButtons } from './present';
   import { symbolUrl } from '../render/symbols';
 
   let {
@@ -448,7 +448,8 @@
       <div class="center">
         <div class="panel banner">
           <div class="eyebrow">Game over</div>
-          <div class="big">{gs.winner === null ? 'No winner' : `${gs.seats[gs.winner].name} wins!`}</div>
+          <div class="big">{gameOverText(gs).title}</div>
+          <div class="sub">{gameOverText(gs).subtitle}</div>
           <div class="again"><ActionButton label="Main menu" glyph="confirm" primary onclick={() => { screen = 'menu'; onnewgame(); }} /></div>
         </div>
       </div>
@@ -499,6 +500,13 @@
     margin-top: 10px;
     font: 800 56px/1 'Fraunces', serif;
     font-variation-settings: 'opsz' 96;
+  }
+  .banner .sub {
+    margin-top: 20px;
+    margin-inline: auto;
+    max-width: 640px;
+    font: 500 20px/1.35 'Source Sans 3', sans-serif;
+    color: var(--ink-2);
   }
   .again {
     margin-top: 22px;

@@ -573,7 +573,8 @@ function checkWin(c: Ctx): boolean {
   s.auction = null;
   s.debts = [];
   c.ev.push({ type: 'gameOver', winner });
-  log(c, winner, winner === null ? 'Game over' : `${name(c, winner)} wins!`);
+  const lost = humans.length === 1 && aliveHumans.length === 0 ? humans[0] : null;
+  log(c, winner, winner !== null ? `${name(c, winner)} wins!` : lost !== null ? `Game over: ${name(c, lost)} is out` : 'Game over');
   return true;
 }
 
@@ -855,6 +856,7 @@ export function apply(state: State, action: Action): ApplyResult {
       a.highBid = action.amount;
       a.highBidder = seat;
       c.ev.push({ type: 'bid', seat, amount: action.amount });
+      log(c, seat, `${name(c, seat)} bid $${action.amount}`);
       checkAuctionEnd(c);
       break;
     }
@@ -865,6 +867,7 @@ export function apply(state: State, action: Action): ApplyResult {
       if (a.highBidder === seat) fail('the high bidder cannot pass');
       a.active = a.active.filter((i) => i !== seat);
       c.ev.push({ type: 'passed', seat });
+      log(c, seat, `${name(c, seat)} passed`);
       checkAuctionEnd(c);
       break;
     }
@@ -940,7 +943,9 @@ export function apply(state: State, action: Action): ApplyResult {
         s.players[seat].cash -= cost;
         s.tiles[action.tile].mortgaged = false;
         c.ev.push({ type: 'unmortgaged', seat, tile: action.tile });
+        log(c, seat, `${name(c, seat)} lifted the mortgage on ${tileName(c, action.tile)}`);
       } else {
+        log(c, seat, `${name(c, seat)} kept ${tileName(c, action.tile)} mortgaged`);
         addDebt(c, seat, 'bank', unmortgageInterest(s, action.tile), `interest on ${tileName(c, action.tile)}`);
       }
       tr.tiles = tr.tiles.filter((t) => t !== action.tile);
@@ -1052,12 +1057,14 @@ export function apply(state: State, action: Action): ApplyResult {
     case 'cancelTrade': {
       requirePhase(s, 'trade');
       if (s.trade!.from !== seat) fail('not your offer');
+      log(c, seat, `${name(c, seat)} withdrew the trade offer`);
       s.trade = null;
       break;
     }
     case 'endTurn': {
       requirePhase(s, 'postRoll');
       requireActive(s, seat);
+      log(c, seat, `${name(c, seat)} ended the turn`);
       nextTurn(c);
       break;
     }

@@ -258,12 +258,26 @@ export function players(s: State): PlayerSummary[] {
   });
 }
 
+/** Game-over banner text for the SPEC §3 win rules (2+ humans, 1-human testing, all bots). */
+export function gameOverText(s: State): { title: string; subtitle: string } {
+  const humans = s.seats.map((_, i) => i).filter((i) => s.seats[i].kind === 'human');
+  const botsLeft = s.seats.some((x, i) => x.kind === 'bot' && !s.players[i].bankrupt);
+  if (s.winner === null) {
+    if (humans.length === 1) return { title: 'The bots win', subtitle: `${s.seats[humans[0]].name} went bankrupt.` };
+    return { title: 'No winner', subtitle: 'Everyone is out.' };
+  }
+  const title = `${s.seats[s.winner].name} wins!`;
+  if (s.seats[s.winner].kind !== 'human') return { title, subtitle: 'Last player standing.' };
+  if (humans.length >= 2) return { title, subtitle: botsLeft ? 'Last human standing (bots still in play don’t count).' : 'Last human standing.' };
+  return { title, subtitle: 'Every bot is out.' };
+}
+
 /** One-line prompt for the current phase. */
 export function phasePrompt(s: State): string {
   const n = (i: number) => s.seats[i].name;
   switch (s.phase) {
     case 'gameOver':
-      return s.winner === null ? 'Game over' : `${n(s.winner)} wins!`;
+      return gameOverText(s).title;
     case 'buy':
       return `${n(s.turn.seat)} landed on ${s.board.tiles[s.pendingBuy!].name}`;
     case 'auction':

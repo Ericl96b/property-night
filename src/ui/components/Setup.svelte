@@ -1,7 +1,7 @@
 <script lang="ts">
-  // New-game setup with controller assignment (SPEC §4): "press any button to join" binds a
-  // pad to the next human seat; seat rows show the controller type. Presets and the full lobby
-  // join in M6/M10.
+  // Lobby (SPEC §3, §4, §9): seats (Human / Bot / Bank-backed bot), token, color, controller
+  // ("press any button to join" binds a pad to the next human seat), rules and board presets,
+  // and turn order (random, or as listed with ▲/▼ reordering).
   import { onDestroy, onMount } from 'svelte';
   import type { SeatConfig } from '../../engine';
   import { TOKEN_IDS } from '../../render/tokens/tokens';
@@ -13,6 +13,7 @@
   import BoardEditor from './BoardEditor.svelte';
   import type { RulesPreset, RulesPresets } from '../../app/presets';
   import type { BoardPreset, BoardPresets } from '../../app/boardPresets';
+  import { KIND_HINT, defaultName, lobbyProblem, moveSeat, ordinal, renameForKind } from '../lobby';
 
   let {
     onstart,
@@ -58,12 +59,7 @@
   let randomOrder = $state(true);
   let remapping = $state<string | null>(null);
 
-  const humans = $derived(seats.filter((s) => s.kind === 'human').length);
-  const dupToken = $derived(new Set(seats.map((s) => s.token)).size !== seats.length);
-  const dupColor = $derived(new Set(seats.map((s) => s.color)).size !== seats.length);
-  const problem = $derived(
-    humans < 1 ? 'At least one human seat is needed.' : dupToken ? 'Each seat needs its own token.' : dupColor ? 'Each seat needs its own color.' : null,
-  );
+  const problem = $derived(lobbyProblem(seats));
   const connected = $derived(pads.filter((p) => p.connected));
 
   function padLabel(id: string | undefined): string {
@@ -98,10 +94,18 @@
     if (seats.length >= 6) return;
     const token = TOKEN_IDS.find((t) => !seats.some((s) => s.token === t))!;
     const color = PLAYER_COLORS.find((c) => !seats.some((s) => s.color === c))!;
-    seats.push({ kind: 'bot', name: `Bot ${seats.length + 1}`, token, color });
+    seats.push({ kind: 'bot', name: defaultName('bot', seats.length + 1), token, color });
   }
   function removeSeat(i: number) {
     if (seats.length > 2) seats.splice(i, 1);
+  }
+  function setKind(i: number) {
+    const seat = seats[i];
+    if (seat.kind !== 'human') seat.controllerId = undefined;
+    seat.name = renameForKind(seat.name, seat.kind, i + 1);
+  }
+  function move(i: number, dir: -1 | 1) {
+    seats = moveSeat(seats, i, dir);
   }
 </script>
 
@@ -110,10 +114,17 @@
   <h1>Property Night</h1>
   <div class="rows">
     {#each seats as seat, i}
-      <div class="row">
+      <div class="row" class:ordered={!randomOrder}>
+        {#if !randomOrder}
+          <div class="order">
+            <span class="ord">{ordinal(i + 1)}</span>
+            <button class="mv" onclick={() => move(i, -1)} disabled={i === 0} aria-label="Move {seat.name} earlier">▲</button>
+            <button class="mv" onclick={() => move(i, 1)} disabled={i === seats.length - 1} aria-label="Move {seat.name} later">▼</button>
+          </div>
+        {/if}
         <span class="swatch" style="background:{seat.color}"></span>
         <input bind:value={seat.name} maxlength="16" aria-label="Seat {i + 1} name" />
-        <select bind:value={seat.kind} aria-label="Seat {i + 1} kind" onchange={() => { if (seat.kind !== 'human') seat.controllerId = undefined; }}>
+        <select bind:value={seat.kind} aria-label="Seat {i + 1} kind" onchange={() => setKind(i)}>
           <option value="human">Human</option>
           <option value="bot">Bot</option>
           <option value="bankBot">Bank-backed bot</option>
@@ -125,8 +136,10 @@
           {#each PLAYER_COLORS as c, k}<option value={c}>Color {k + 1}</option>{/each}
         </select>
         <button class="x" onclick={() => removeSeat(i)} disabled={seats.length <= 2} aria-label="Remove seat">×</button>
-        {#if seat.kind === 'human'}
-          <div class="pad">
+        {#if seat.kind !== 'human'}
+          <div class="sub hint-line"><span class="badge {seat.kind}">{seat.kind === 'bot' ? 'BOT' : 'BANK'}</span>{KIND_HINT[seat.kind]}</div>
+        {:else}
+          <div class="sub pad">
             <span class:bound={!!seat.controllerId}>{padLabel(seat.controllerId)}</span>
             {#if seat.controllerId}<button class="link" onclick={() => (seat.controllerId = undefined)}>Unbind</button>{/if}
           </div>
@@ -136,7 +149,11 @@
   </div>
   <div class="opts">
     <button class="link" onclick={addSeat} disabled={seats.length >= 6}>+ Add seat</button>
-    <label><input type="checkbox" bind:checked={randomOrder} /> Random turn order</label>
+    <div class="turnorder" role="group" aria-label="Turn order">
+      <span>Turn order</span>
+      <button class="seg" class:on={randomOrder} aria-pressed={randomOrder} onclick={() => (randomOrder = true)}>Random</button>
+      <button class="seg" class:on={!randomOrder} aria-pressed={!randomOrder} onclick={() => (randomOrder = false)}>As listed</button>
+    </div>
   </div>
   <div class="opts">
     <label>Rules
@@ -216,12 +233,83 @@
   }
   .row {
     display: grid;
-    grid-template-columns: 28px 1fr 190px 150px 120px 44px;
+    grid-template-columns: [sw] 28px [name] 1fr 190px 150px 120px 44px;
     gap: 6px 10px;
     align-items: center;
   }
+  .row.ordered {
+    grid-template-columns: [order] 112px [sw] 28px [name] 1fr 190px 150px 120px 44px;
+  }
+  .order {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .ord {
+    width: 40px;
+    font: 700 17px 'Source Sans 3', sans-serif;
+    color: var(--ink-2);
+  }
+  .mv {
+    width: 32px;
+    height: 36px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--paper);
+    font: 700 13px 'Source Sans 3', sans-serif;
+    cursor: pointer;
+  }
+  .mv:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  .sub {
+    grid-column: name / -1;
+  }
+  .hint-line {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    font: 500 15px/1.3 'Source Sans 3', sans-serif;
+    color: var(--ink-2);
+    margin-top: -2px;
+  }
+  .badge {
+    font: 700 12px/1 'Source Sans 3', sans-serif;
+    letter-spacing: 1px;
+    padding: 4px 7px;
+    border-radius: 5px;
+    color: var(--paper-hi);
+    background: var(--ink-2);
+    flex: none;
+  }
+  .badge.bankBot {
+    background: var(--brass);
+  }
+  .turnorder {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .turnorder > span {
+    margin-right: 6px;
+  }
+  .seg {
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1.5px solid rgba(43, 33, 25, 0.3);
+    background: #fff;
+    font: 700 16px 'Source Sans 3', sans-serif;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .seg.on {
+    background: var(--forest);
+    border-color: var(--forest);
+    color: var(--paper-hi);
+  }
   .pad {
-    grid-column: 2 / -1;
     display: flex;
     gap: 12px;
     align-items: center;

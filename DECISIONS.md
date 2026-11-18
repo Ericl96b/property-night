@@ -140,3 +140,11 @@ Where SPEC.md is silent, the decision taken is recorded here (SPEC §0).
 - **Undo** (setting, default on): reverts the last decision — buy, build, sell, mortgage, unmortgage, or a trade sent — until the next roll or card, or until another player acts (bots included), or the turn ends. Only the latest decision is undoable.
 - **Main menu:** Continue, New game, Load game, Import save, Settings. Presets and controllers are on the new-game screen. "Quit to menu" in the pause menu replaces "New game" (the game is autosaved). Quitting clears tokens, decals and buildings from the board.
 - **Game log:** the full log (newest first) is the read-only Select/L view from M4; the save keeps the last 200 lines plus the complete action list.
+
+## Milestone 10 — bots in the lobby (2026-11-17)
+
+- **Turn order** in the lobby is a two-way choice, **Random** (default, shuffled with the game seed) or **As listed**; "As listed" shows 1st/2nd/… and ▲/▼ buttons on each seat row to reorder.
+- **Bot labels:** each Bot / Bank-backed seat shows a BOT / BANK badge and a one-line description of what it does. A still-default seat name follows its kind ("Player 2" → "Bot 2" → "Bank 2"); custom names are kept.
+- **Lobby validation** adds one rule to the SPEC's (at least one human, no duplicate token/color): **at least two seats must be human or normal bots**. A human with only bank-backed bots would end instantly, since bank-backed bots are ignored by the win check. Empty names are also refused.
+- **Every action gets a log line** (SPEC §3 "every bot action shows with … a log line"), for humans too so the log reads consistently: bids ("X bid $N"), passes, ending the turn, withdrawing a trade offer, and the received-mortgage choice were the gaps. The right panel shows the latest five lines while bots act.
+- **Game-over wording:** 2+ humans — "{name} wins!" / "Last human standing" (noting that bots still in play do not count); 1 human — "{name} wins!" / "Every bot is out", or "The bots win" / "{name} went bankrupt"; all bots (review URL only) — "{name} wins!" / "Last player standing". The engine log names the human who lost in testing mode.
