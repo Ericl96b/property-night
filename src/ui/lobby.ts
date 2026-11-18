@@ -1,5 +1,6 @@
 // Lobby (new-game setup) helpers, kept pure so they can be unit-tested (SPEC §3, §9).
 import type { SeatConfig, SeatKind } from '../engine';
+import type { BankBotMode } from '../engine/rules';
 
 export const KIND_LABEL: Record<SeatKind, string> = {
   human: 'Human',
@@ -13,6 +14,17 @@ export const KIND_HINT: Record<SeatKind, string> = {
   bot: 'Medium bot: buys most properties, completes sets, builds, trades and bids up to a value estimate.',
   bankBot: 'Unlimited bank money. Never buys, bids or trades; unowned land goes to auction. Cannot win.',
 };
+
+/** Bank-backed bot hint, following the rules preset's "bankBotMode". */
+export function bankBotHint(mode: BankBotMode): string {
+  const after =
+    mode === 'remove'
+      ? ' Leaves the table after the first hotel a human builds.'
+      : mode === 'cutoff'
+        ? ' After the first hotel a human builds, it plays on its starting cash until it goes bankrupt.'
+        : '';
+  return KIND_HINT.bankBot + after;
+}
 
 const DEFAULT_PREFIX: Record<SeatKind, string> = { human: 'Player', bot: 'Bot', bankBot: 'Bank' };
 const DEFAULT_NAME = /^(Player|Bot|Bank) (\d+)$/;

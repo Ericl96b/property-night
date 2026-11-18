@@ -6,6 +6,7 @@ import { BOARD_SIZE, BOARD_TOP, SIDE_YAW, type Side } from './layout';
 
 const FOV = 30;
 const PITCH = (58 * Math.PI) / 180;
+const OVERHEAD_PITCH = (89 * Math.PI) / 180;
 const FILL = 0.88;
 const FOLLOW_MAX_OFFSET = 0.15 * BOARD_SIZE;
 const FOLLOW_ZOOM = 0.88;
@@ -22,9 +23,14 @@ function shortestDelta(from: number, to: number): number {
   return d;
 }
 
-/** Solve camera distance and target offset so the board spans FILL of the screen height, centered. */
-function solveRest(pitch: number): { distance: number; targetZ: number } {
-  const cam = new THREE.PerspectiveCamera(FOV, 16 / 9, 0.01, 50);
+/**
+ * Solve camera distance and target offset so the board spans at most FILL of the screen height,
+ * centered, and its widest (near) edge stays within ±maxX in normalized device coordinates (the
+ * free space between the overlay's side panels). The board is square, so one solve holds for
+ * every side the rig rotates to.
+ */
+export function solveRest(pitch: number, aspect = 16 / 9, maxX = 1): { distance: number; targetZ: number } {
+  const cam = new THREE.PerspectiveCamera(FOV, aspect, 0.01, 50);
   const corners = [-0.5, 0.5].flatMap((x) => [-0.5, 0.5].map((z) => new THREE.Vector3(x * BOARD_SIZE, BOARD_TOP, z * BOARD_SIZE)));
   const extent = (d: number, tz: number) => {
     const target = new THREE.Vector3(0, BOARD_TOP, tz);
@@ -33,12 +39,14 @@ function solveRest(pitch: number): { distance: number; targetZ: number } {
     cam.updateMatrixWorld();
     let lo = Infinity;
     let hi = -Infinity;
+    let x = 0;
     for (const c of corners) {
       const p = c.clone().project(cam);
       lo = Math.min(lo, p.y);
       hi = Math.max(hi, p.y);
+      x = Math.max(x, Math.abs(p.x));
     }
-    return { lo, hi };
+    return { lo, hi, x };
   };
   let dLo = 0.5;
   let dHi = 8;
@@ -55,8 +63,8 @@ function solveRest(pitch: number): { distance: number; targetZ: number } {
       if (hi + lo > 0) zHi = tz;
       else zLo = tz;
     }
-    const { lo, hi } = extent(d, tz);
-    if (hi - lo > FILL * 2) dLo = d;
+    const { lo, hi, x } = extent(d, tz);
+    if (hi - lo > FILL * 2 || x > maxX) dLo = d;
     else dHi = d;
   }
   return { distance: (dLo + dHi) / 2, targetZ: tz };
@@ -76,7 +84,8 @@ export class CameraDirector {
   speed = 1;
 
   private rest = solveRest(PITCH);
-  private overhead = solveRest((89 * Math.PI) / 180);
+  private overhead = solveRest(OVERHEAD_PITCH);
+  private viewport = { aspect: 16 / 9, maxX: 1 };
   side: Side = 0;
   private yaw = 0;
   private yawFrom = 0;
@@ -94,6 +103,19 @@ export class CameraDirector {
 
   constructor() {
     this.lightRig.name = 'light-rig';
+    this.apply();
+  }
+
+  /**
+   * Window resized: re-fit the rest and overhead views to the real aspect ratio and to the free
+   * width between the side panels (`maxX`, normalized device coordinates).
+   */
+  setViewport(w: number, h: number, maxX: number): void {
+    const aspect = w / h;
+    if (Math.abs(aspect - this.viewport.aspect) < 1e-6 && Math.abs(maxX - this.viewport.maxX) < 1e-6) return;
+    this.viewport = { aspect, maxX };
+    this.rest = solveRest(PITCH, aspect, maxX);
+    this.overhead = solveRest(OVERHEAD_PITCH, aspect, maxX);
     this.apply();
   }
 

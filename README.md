@@ -25,7 +25,9 @@ Each human seat owns one controller (join from the setup screen by pressing any 
 | Game log | L | Select (Share / −) |
 | Fullscreen | F | from the pause menu |
 
-Review URL parameters: `?quality=high|low`, `?seed=N`, `?speed=slow|normal|fast|instant`, `?auto=human,bot,bank` (start a game immediately).
+Review URL parameters: `?quality=high|low`, `?seed=N`, `?speed=slow|normal|fast|instant`, `?auto=human,bot,bank` (start a game immediately), `?ao=1|0` (ambient occlusion on/off).
+
+Graphics settings (pause menu, independent of Quality): Ambient occlusion (off by default), Brightness 70–130%, Tone mapping Filmic (ACES) / AgX / Neutral.
 
 Review screenshots: [docs/m0/](docs/m0/) (visual prototype), [docs/m2/](docs/m2/), [docs/m3/](docs/m3/), [docs/m4/](docs/m4/), [docs/m5/](docs/m5/), [docs/m6/](docs/m6/), [docs/m7/](docs/m7/), [docs/m8/](docs/m8/), [docs/m9/](docs/m9/), [docs/m10/](docs/m10/), [docs/m11/](docs/m11/).
 

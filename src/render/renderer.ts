@@ -6,7 +6,23 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import type { QualityProfile } from './quality';
+
+/** Graphics options outside the Quality preset (owner request, 2026-11-18). */
+export interface GraphicsOptions {
+  /** Ambient occlusion (GTAO) at low strength for contact shading. */
+  ao: boolean;
+  /** Tone-mapping exposure (brightness), 0.7–1.3. */
+  exposure: number;
+  toneMapping: 'aces' | 'agx' | 'neutral';
+}
+
+const TONE_MAPPING: Record<GraphicsOptions['toneMapping'], THREE.ToneMapping> = {
+  aces: THREE.ACESFilmicToneMapping,
+  agx: THREE.AgXToneMapping,
+  neutral: THREE.NeutralToneMapping,
+};
 
 /** Called every loop iteration; return true while still animating. Tickers stay registered. */
 export type Ticker = (dt: number, now: number) => boolean;
@@ -17,6 +33,9 @@ export class Renderer {
   camera: THREE.PerspectiveCamera;
   private composer!: EffectComposer;
   private fxaa?: FXAAPass;
+  private gtao?: GTAOPass;
+  private quality?: QualityProfile;
+  private graphics: GraphicsOptions = { ao: false, exposure: 1, toneMapping: 'aces' };
   private tickers = new Set<Ticker>();
   private dirty = true;
   private running = false;
@@ -46,8 +65,21 @@ export class Renderer {
     return this.gl.capabilities.getMaxAnisotropy();
   }
 
+  /** Brightness and tone mapping apply at once; turning AO on or off rebuilds the post chain. */
+  setGraphics(g: GraphicsOptions): void {
+    const aoChanged = g.ao !== this.graphics.ao;
+    this.graphics = { ...g };
+    this.gl.toneMapping = TONE_MAPPING[g.toneMapping] ?? THREE.ACESFilmicToneMapping;
+    this.gl.toneMappingExposure = THREE.MathUtils.clamp(g.exposure, 0.5, 1.5);
+    if (aoChanged && this.quality) this.applyQuality(this.quality);
+    this.requestRender();
+  }
+
   applyQuality(q: QualityProfile): void {
+    this.quality = q;
     this.composer?.dispose();
+    this.gtao?.dispose();
+    this.gtao = undefined;
     const size = this.gl.getDrawingBufferSize(new THREE.Vector2());
     const rt = new THREE.WebGLRenderTarget(size.x, size.y, {
       type: THREE.HalfFloatType,
@@ -55,6 +87,16 @@ export class Renderer {
     });
     this.composer = new EffectComposer(this.gl, rt);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    if (this.graphics.ao) {
+      // Radius in board units (a tile is ≈0.08): contact shading where houses, hotels and tokens
+      // meet the board. Subtle by nature here: the board is flat and soft shadows already darken
+      // most contacts.
+      this.gtao = new GTAOPass(this.scene, this.camera, size.x, size.y);
+      this.gtao.blendIntensity = 1;
+      this.gtao.updateGtaoMaterial({ radius: 0.1, distanceExponent: 1, thickness: 0.05, scale: 1, samples: 16 });
+      this.gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, samples: 16 });
+      this.composer.addPass(this.gtao);
+    }
     this.composer.addPass(new OutputPass());
     this.fxaa = undefined;
     if (q.fxaa) {

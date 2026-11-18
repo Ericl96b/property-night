@@ -25,7 +25,7 @@ Where SPEC.md is silent, the decision taken is recorded here (SPEC §0).
 
 ## Milestone 0 — visual prototype (2026-11-17)
 
-- **House width:** SPEC §10.5 asks for houses ≈30% of the tile width *and* four across the band with gaps. Four at 30% would need 120% of the width, so houses are ≈19% of the tile width (4 fit with ≈5% gaps). Hotels span 70% as specified.
+- **House width:** SPEC §10.5 asks for houses ≈30% of the tile width *and* four across the band with gaps. Four at 30% would need 120% of the width, so houses were ≈19% of the tile width (4 fit with ≈5% gaps). Hotels span 70% as specified. *Widened to 22% on 2026-11-18 (see Alpha refinements).*
 - **Building placement covers band names:** houses stand on the color band (SPEC §10.5/§16), so a fully built street partly hides its printed name, as on a real board. The deed panel (M2) always shows the name.
 - **Board-face optical sizing:** Canvas 2D cannot set `font-variation-settings`. Text is drawn at its reference CSS size under a scaling transform, so Fraunces' automatic optical sizing tracks the print size (≈ `opsz` 9–12 on tiles), matching the reference.
 - **Symbol text:** `<text>` elements inside symbol SVGs (the Chance "?" and the Income Tax "$") are stripped before rasterizing and re-drawn with Canvas text in the self-hosted Fraunces.
@@ -33,7 +33,7 @@ Where SPEC.md is silent, the decision taken is recorded here (SPEC §0).
 - **Ownership decals:** the owner disc sits at the tile's outer edge just below the price; the mortgaged state is a tile-sized overlay sampling the same board texture through a desaturating shader, plus an oxblood "M" stamp; the promise ribbon sits at the outer corner of the tile body.
 - **Extra player colors:** the two additional player hues are raspberry `#C8326E` and blue `#2E7DD7` (SPEC §10.1 leaves them open).
 - **Lamp pool:** baked into table vertex colors (rotation-invariant, zero cost) rather than a spot light.
-- **Ambient occlusion:** not used in M0. Soft PCF shadows already give contact shading under tokens and houses, and AO would cost the integrated-GPU budget. Can be added on High if the owner wants it.
+- **Ambient occlusion:** not used in M0 (*now an independent setting, see Alpha refinements*). Soft PCF shadows already give contact shading under tokens and houses, and AO would cost the integrated-GPU budget. Can be added on High if the owner wants it.
 - **Dice physics scale:** 1 board unit ≈ 45 cm, so gravity is scaled to −21.8 units/s². Dice are cannon-es boxes (rounded corners are visual only); the arena walls sit at ±0.30 so dice never reach the tiles (±0.368). In 10,000 test throws, 33 needed an invisible re-throw and none had to be placed flat.
 - **Pip layout:** +X 3, −X 4, +Y 1, −Y 6, +Z 2, −Z 5 (opposites sum to 7).
 - **Medallion engraving:** detail lines (key bow ring, cat ears and whiskers, sail seams, gramophone cabinet) are thin darkened-brass inlays standing ≈0.1 mm proud of each face.
@@ -58,7 +58,7 @@ Where SPEC.md is silent, the decision taken is recorded here (SPEC §0).
 - **Bankruptcy to a player:** buildings are sold back to the bank first; the cash, every deed and jail cards go to the creditor, who then decides per mortgaged deed (pay 10% now or lift the mortgage). **To the bank:** deeds return unmortgaged and are auctioned one by one (Classic). A forfeiting high bidder's bid is voided.
 - **One human, testing mode:** if the human goes bankrupt the game ends with no winner.
 - **Medium bot:** keeps a reserve of $150 + 30% of the worst rent it could face (max $500); values a lot at its price, ×1.7 if it completes the bot's set, ×1.4 if it blocks an opponent's set, ×1.2 if the bot already owns part of the set; bids up to that value (keeping half the reserve). It proposes one set-completing trade per turn, raising its cash offer from 1.8× to 4× the price over the game, or a set-for-set swap; it accepts only trades worth ≥ 115% of what it gives (handing someone a set counts heavily). It builds to 3 houses as specified, but goes on to hotels when it is very cash-rich (> reserve + $1,500) or the bank is out of houses; otherwise 5–6 player games stall with every house on the board.
-- **Bank-backed bot money pump:** because it pays rent from the bank's unlimited money, games that include one can run indefinitely. Kept exactly as specified; listed as an open question.
+- **Bank-backed bot money pump:** because it pays rent from the bank's unlimited money, games that include one can run indefinitely. Kept exactly as specified; listed as an open question. *Resolved 2026-11-18 by the `bankBotMode` rule (see Alpha refinements).*
 - **Card text and board names:** two Chance cards name tiles ("Rose Court", "Midnight Park", "North Line", "Scarlet Square"). The card editor (M8) will template these from the board preset so renamed boards stay consistent.
 
 ## Milestone 2 — engine → director → scene (2026-11-17)
@@ -160,3 +160,28 @@ Where SPEC.md is silent, the decision taken is recorded here (SPEC §0).
 - **Performance:** render on demand was already in place (0 frames while idle). A worst-case board (every property owned, 4 houses or a hotel on every street, mortgages) draws 71–72 calls at High and Low (budget < 150). Startup to the interactive menu measured 1.28 s (Low) / 1.33 s (High) on the live production build with a cold cache (headless Chrome on the build machine). Auto quality now treats Intel Arc as discrete; its GPU-name rules are unit-tested.
 - **PWA:** web app manifest (fullscreen, landscape, walnut theme color), a code-drawn icon (brass house and crescent moon on the forest green, rendered to PNG by `scripts/make-icons.mjs`), and a service worker: pages network-first with the cached shell as offline fallback, hashed assets/fonts/icons cache-first, and the page hands the worker every URL it loaded so the first visit is cached in full. Registered in production builds only.
 - **Game-over panel** no longer shows the current tile under "X wins!".
+
+## Alpha refinements: owner answers to the open questions (2026-11-18)
+
+- **Houses** are 22% of the tile width: the widest four can be with small gaps (≈2.4 px of the 20.4 px slot pitch at print scale), with the outer houses still inside the tile edge. Hotels stay at 70%.
+- **Board fit:** the rest camera now sizes the board so its widest projected edge stays 24 logical px clear of both side panels, and at most 88% of the screen height. At the 58° pitch the near edge is wider than the board is tall.
+  - It's solved for the real window aspect and re-solved on resize (`CameraDirector.setViewport`; panel geometry in `src/ui/stage.ts`). One solve holds for all four rotations because the board is square.
+  - Result: the board fills 77% of the height at 16:9 and 70% at 16:10, with 24 px clearance at every rotation.
+  - Follow and push-in zooms stay relative to the new rest.
+- **Graphics settings, independent of Quality:**
+  - Ambient occlusion on/off: GTAO from three/examples, off by default. It adds a normal/depth pass, giving 109 draw calls on a worst-case board (budget 150). It's subtle on this scene: the board is flat and the soft shadows already darken contacts.
+  - Brightness 70–130% (tone-mapping exposure).
+  - Tone mapping: Filmic (ACES, the unchanged default) / AgX / Neutral.
+  - There's no Bloom: SPEC §10.3 rules it out and it was never built. A washed-out look comes from tone mapping and exposure, which the two new settings address.
+  - Token portraits stay on ACES (made once, UI images).
+- **Bank-backed bots:** the `bankBotMode` rule (in the "Bank-backed bots" area of the rules editor) sets what happens after the first hotel a **human** builds. Direct builds and shortage-auction wins count; normal bots' hotels never do; only the first hotel counts.
+  - `remove` (**Classic default**, an owner-approved change to SPEC §3): every bank-backed bot leaves the table (marked out, with `leftTable` set) with a banner and a log line. Play moves on even if it was the bot's turn. Its card reads "Left the table".
+  - `cutoff`: the bank stops backing it. It gets the starting cash and keeps every other bank-bot limit: it never buys, bids, trades, borrows, draws cards, goes to jail or collects GO. Rent and tax come from its own cash. When it can't pay, it declares bankruptcy and the creditor gets what it has left. Its card shows its real cash instead of ∞.
+  - `always`: the old behavior (unlimited money forever).
+  - Games saved before the rule existed carry rules without it and play as `always`, so a resumed game never changes behavior.
+  - The lobby's bank-bot hint follows the selected preset's mode.
+- **Confirmed by the owner, unchanged:**
+  - The medium bot keeps building hotels when very cash-rich or when the bank is out of houses.
+  - The lobby still requires two seats that are humans or normal bots.
+  - The speed die stays as text in the prompt and log (no 3D die).
+- **Headless runs with humans:** `runHeadless(…, { humansAsBots: true })` lets human seats play the medium strategy, so the human-hotel trigger can be tested unattended. `tests/engine/bankBot.test.ts` runs 30 games per mode, with 0 illegal states.

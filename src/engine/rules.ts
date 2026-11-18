@@ -69,7 +69,12 @@ export interface Rules {
   seizedPropertyTo: 'auction' | 'unowned';
   // Bankruptcy
   bankruptToBank: 'auction' | 'unowned';
+  // Bank-backed bots (owner request, 2026-11-18): what happens after the first hotel a human builds.
+  bankBotMode: BankBotMode;
 }
+
+/** always = unlimited money forever; cutoff = plays on its starting cash; remove = leaves the table. */
+export type BankBotMode = 'always' | 'cutoff' | 'remove';
 
 export const CLASSIC_RULES: Readonly<Rules> = Object.freeze({
   startingCash: 1500,
@@ -122,4 +127,5 @@ export const CLASSIC_RULES: Readonly<Rules> = Object.freeze({
   seizureValue: 'purchasePlusBuildings',
   seizedPropertyTo: 'auction',
   bankruptToBank: 'auction',
+  bankBotMode: 'remove',
 });

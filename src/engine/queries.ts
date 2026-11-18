@@ -105,6 +105,14 @@ export function isBankBot(s: State, seat: number): boolean {
   return s.seats[seat].kind === 'bankBot';
 }
 
+/**
+ * A bank-backed bot whose payments the bank still covers. After the cutoff (rule
+ * "bankBotMode") it keeps every other bank-bot limit but pays from its own cash.
+ */
+export function isBankBacked(s: State, seat: number): boolean {
+  return isBankBot(s, seat) && !s.bankBackingEnded;
+}
+
 export function alive(s: State, seat: number): boolean {
   return !s.players[seat].bankrupt;
 }

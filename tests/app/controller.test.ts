@@ -116,7 +116,9 @@ describe('game controller', () => {
       expect(checkInvariants(c.state)).toEqual([]);
       expect(botActions).toBeGreaterThan(0);
       expect(c.state.tiles.every((t) => t.owner !== bank)).toBe(true);
-      expect(c.state.players[bank].bankrupt).toBe(false);
+      // Classic "bankBotMode: remove": it is out only by leaving the table after a human hotel.
+      expect(c.state.players[bank].bankrupt).toBe(!!c.state.bankBackingEnded);
+      expect(!!c.state.players[bank].leftTable).toBe(!!c.state.bankBackingEnded);
       if (c.state.phase === 'gameOver') {
         finished++;
         // With 2+ humans the game ends the moment one human is left; that human wins.

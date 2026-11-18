@@ -8,6 +8,7 @@
   import { decide } from '../app/ownership';
   import { glyphFamily, type InputManager, type PadInfo } from '../input/manager';
   import { moveFocus, type Dir } from './focus';
+  import { stageFit } from './stage';
   import LogPanel from './components/LogPanel.svelte';
   import StatsPanel from './components/StatsPanel.svelte';
   import TradePanel from './components/TradePanel.svelte';
@@ -104,10 +105,9 @@
       }
     });
     const fit = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      scale = Math.min(w / 1920, h / 1080);
-      offset = { x: (w - 1920 * scale) / 2, y: (h - 1080 * scale) / 2 };
+      const f = stageFit(window.innerWidth, window.innerHeight);
+      scale = f.scale;
+      offset = f.offset;
     };
     fit();
     window.addEventListener('resize', fit);

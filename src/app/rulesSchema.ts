@@ -199,6 +199,18 @@ export const RULE_FIELDS: RuleField[] = [
       { value: 'unowned', label: 'Returned unowned' },
     ],
   },
+
+  {
+    key: 'bankBotMode',
+    area: 'Bank-backed bots',
+    label: 'After the first hotel a human builds',
+    kind: 'select',
+    options: [
+      { value: 'remove', label: 'Leaves the table' },
+      { value: 'cutoff', label: 'Bank stops backing: plays on its starting cash' },
+      { value: 'always', label: 'Nothing: always backed' },
+    ],
+  },
 ];
 
 export const RULE_AREAS = [...new Set(RULE_FIELDS.map((f) => f.area))];

@@ -1,6 +1,6 @@
 # Hand-off: resume the Property Night build
 
-Give this file to a new Claude Code session opened in `C:\Users\Ericl_9vgzjbj\Projects\Property_Night`. It is self-contained: read it, then the files it points to. **All milestones are complete**; further work starts from the owner's feedback.
+Give this file to a new Claude Code session opened in the project folder (currently `C:\Users\dmvchiroel\projects\property-night`; on a fresh machine clone `Ericl96b/property-night` and run `npm ci`). It is self-contained: read it, then the files it points to. **All milestones are complete**; further work starts from the owner's feedback.
 
 ## Where things stand (2026-11-17)
 
@@ -8,7 +8,8 @@ Give this file to a new Claude Code session opened in `C:\Users\Ericl_9vgzjbj\Pr
 - **Done:** all milestones **M0–M11** of SPEC §14, each committed to `main` with a green Pages deploy (see `git log`). The §15 acceptance summary is `docs/m11/acceptance.md`.
 - **Tests:** `npm test` (Vitest, ~15 s). Acceptance run: `npm run sim -- 10000` (results in `docs/m1/sim-report.md`).
 - **Left for the owner (real hardware only):** DS4 via DS4Windows + Switch Pro in one auction (verified only with simulated pads); §10.10 frame rates on the TV PC at 4K (High) and a 1080p laptop (Low); couch readability of the board text at 4K. Everything else in §15 is automated and passing.
-- **Possible next work:** answers to the open questions below, then any owner feedback from real-hardware play.
+- **Alpha refinements (2026-11-18):** the owner's answers to the four alpha questions are built: house width, the board fitting between the panels, the AO / brightness / tone-mapping settings, and the `bankBotMode` rule. To check them, run `node scripts/cdp.mjs scripts/plans/refine.mjs .snapshots` (set `PN_W`/`PN_H` for other window sizes).
+- **Possible next work:** the owner's next batch of fixes and additions, then any feedback from real-hardware play.
 
 ## Read these first
 
@@ -59,12 +60,9 @@ Gotchas already hit: Svelte 5 treats `$state` as a store if a variable named `st
 
 No milestones remain. If the owner asks for more work, start from their feedback; keep the standing instructions above (DECISIONS.md for judgement calls, open questions in `docs/PROGRESS.md`, commit → push → green deploy). Useful checks: `scripts/plans/m10.mjs` (lobby/bots/game over), `m11.mjs` (sound unlock, volumes, stats), `perf.mjs` (draw calls, idle, fps), `boot.mjs` (startup marks), `pwa.mjs` (offline on the live build).
 
-## Open questions for the owner (also in `docs/PROGRESS.md`)
+## Open questions for the owner
 
-1. House width ≈19% of a tile (the SPEC's 30% cannot fit four).
-2. Board at 88% screen height nearly touches the right panel at 1080p; drop to ≈84%?
-3. Ambient occlusion on High (left out so far)?
-4. The bank-backed bot pays rent from the bank's unlimited money, so games with one can run indefinitely; keep as specified or cap it?
+None open. The four alpha questions were answered and built on 2026-11-18 (DECISIONS.md, "Alpha refinements").
 
 ## Housekeeping
 

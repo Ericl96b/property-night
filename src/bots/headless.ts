@@ -2,6 +2,7 @@
 // checking invariants after every action.
 import { apply, checkInvariants, newGame, seatsToAct, type Action, type NewGameConfig, type State } from '../engine';
 import { chooseAction } from './index';
+import { chooseMedium } from './medium';
 
 export interface HeadlessResult {
   state: State;
@@ -18,6 +19,8 @@ export interface HeadlessOptions {
   maxTurns?: number;
   checkEveryAction?: boolean;
   keepLog?: boolean;
+  /** Human seats play the medium-bot strategy (games with humans, run unattended). */
+  humansAsBots?: boolean;
 }
 
 export function runHeadless(cfg: NewGameConfig, opts: HeadlessOptions = {}): HeadlessResult {
@@ -33,7 +36,7 @@ export function runHeadless(cfg: NewGameConfig, opts: HeadlessOptions = {}): Hea
     // Auctions: every bidder is live; take decisions round-robin so bids alternate.
     for (let k = 0; k < actors.length && !action; k++) {
       const seat = actors[(rotate + k) % actors.length];
-      action = chooseAction(s, seat);
+      action = opts.humansAsBots && s.seats[seat].kind === 'human' ? chooseMedium(s, seat) : chooseAction(s, seat);
     }
     rotate++;
     if (!action) {

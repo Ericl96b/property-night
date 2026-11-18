@@ -39,6 +39,8 @@ export interface PlayerState {
   jail: JailState | null;
   gojf: DeckId[];
   bankrupt: boolean;
+  /** A bank-backed bot that left the table (rule "bankBotMode: remove"); also marked bankrupt. */
+  leftTable?: boolean;
   /** Has passed GO at least once (the speed die joins after the first lap). */
   lapped: boolean;
   loans: Loan[];
@@ -199,6 +201,11 @@ export interface State {
   rng: RngState;
   /** Stats history (absent in saves from before M11; filled in on load). */
   history: GameHistory;
+  /**
+   * The first human hotel has gone up and the bank no longer backs bank-backed bots (rule
+   * "bankBotMode" cutoff or remove). Absent in older saves = false.
+   */
+  bankBackingEnded?: boolean;
 }
 
 // ---- actions ------------------------------------------------------------------------------
@@ -265,6 +272,8 @@ export type GameEvent =
   | { type: 'tradeRejected'; offer: TradeOffer }
   | { type: 'promiseEnded'; promise: GamePromise; reason: 'expired' | 'void' }
   | { type: 'turnEnded'; seat: number }
+  /** First human hotel: bank-backed bots lose their backing (cutoff) or leave the table (remove). */
+  | { type: 'bankBackingEnded'; mode: 'cutoff' | 'remove'; seats: number[]; by: number; tile: number; cash: number }
   | { type: 'gameOver'; winner: number | null };
 
 export interface ApplyResult {

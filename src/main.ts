@@ -14,6 +14,7 @@ import type { Speed } from './director/queue';
 import type { NewGameConfig, SeatConfig, State } from './engine';
 import { rollDie, seedRng } from './engine/rng';
 import App from './ui/App.svelte';
+import { boardMaxNdcX } from './ui/stage';
 import { openKV } from './storage/db';
 import { RulesPresets } from './app/presets';
 import { BoardPresets, printView } from './app/boardPresets';
@@ -57,8 +58,15 @@ async function boot(): Promise<void> {
   const sp = params.get('speed') as Speed | null;
   if (sp && ['slow', 'normal', 'fast', 'instant'].includes(sp)) settings.speed = sp;
 
+  const ao = params.get('ao');
+  if (ao === '1' || ao === '0') settings.ambientOcclusion = ao === '1';
+
   const scene = await GameScene.create(root, CLASSIC_BOARD, settings.quality);
   performance.mark('pn-scene');
+  // The board is sized to the free width between the overlay's side panels (re-fit on resize).
+  const fitCamera = (w: number, h: number) => scene.camera.setViewport(w, h, boardMaxNdcX(w, h));
+  scene.renderer.onResize = fitCamera;
+  fitCamera(window.innerWidth, window.innerHeight);
 
   let controller!: GameController;
   const director = new Director(scene, {
@@ -97,6 +105,7 @@ async function boot(): Promise<void> {
     scene.camera.settings.reduceMotion = settings.reduceMotion;
     if (rm && controller.state) scene.camera.toSide(controller.state.seats[controller.state.turn.seat].boardSide, true);
     scene.camera.apply();
+    scene.renderer.setGraphics({ ao: settings.ambientOcclusion, exposure: settings.brightness, toneMapping: settings.toneMapping });
     scene.renderer.requestRender();
   };
   applySettings();

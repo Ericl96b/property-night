@@ -21,9 +21,10 @@ All milestones M0–M11 are built. Every check that can run on this machine pass
 - Speed and reduce-motion audit (camera turn timing and the fixed overhead view are unit-tested).
 - Installable PWA with offline play after the first visit: verified on the live build (manifest and worker active, 14 entries cached, the menu and board load with the network switched off; `docs/m11/pwa-offline.png`).
 
-## Open questions (unchanged, also in docs/PROGRESS.md)
+## Open questions
 
-1. House width ≈19% of a tile (the SPEC's 30% cannot fit four).
-2. Board at 88% screen height nearly touches the right panel at 1080p; drop to ≈84%?
-3. Ambient occlusion on High (left out so far)?
-4. A bank-backed bot pays rent from the bank's unlimited money, so games with one can run indefinitely; keep as specified or cap it?
+The owner answered all four on 2026-11-18, and the answers are built (DECISIONS.md, "Alpha refinements"):
+- houses are widened to 22%
+- the board now fits between the side panels
+- Ambient occlusion, Brightness and Tone mapping are settings
+- the `bankBotMode` rule sets what happens to bank-backed bots after the first human hotel

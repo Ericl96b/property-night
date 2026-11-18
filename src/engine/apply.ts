@@ -7,6 +7,7 @@ import {
   buildingCounts,
   buildingSellValue,
   groupTiles,
+  isBankBacked,
   isBankBot,
   isOwnable,
   liquidationValue,
@@ -55,7 +56,7 @@ function credit(c: Ctx, seat: number, amount: number): void {
 function addDebt(c: Ctx, from: number, to: Creditor, amount: number, reason: string, opts: { tile?: number; pot?: boolean; rent?: boolean } = {}): void {
   if (amount <= 0) return;
   if (typeof to === 'number' && (isBankBot(c.s, to) || c.s.players[to].bankrupt)) return;
-  if (isBankBot(c.s, from)) {
+  if (isBankBacked(c.s, from)) {
     // Unlimited money: the bank pays on the bank-backed bot's behalf.
     if (typeof to === 'number') credit(c, to, amount);
     if (opts.rent && typeof to === 'number') countRent(c, null, to, amount, opts.tile);
@@ -461,6 +462,36 @@ function placeBuilding(c: Ctx, seat: number, tile: number): void {
   ts.buildings++;
   c.ev.push({ type: 'built', seat, tile, buildings: ts.buildings });
   log(c, seat, `${name(c, seat)} built ${ts.buildings === 5 ? 'a hotel' : 'a house'} on ${tileName(c, tile)}`);
+  if (ts.buildings === 5) endBankBacking(c, seat, tile);
+}
+
+/**
+ * Rule "bankBotMode": the first hotel a human builds ends the bank's backing. Cutoff: each
+ * bank-backed bot plays on its starting cash (keeping every other bank-bot limit) until it
+ * goes bankrupt. Remove: each one leaves the table. Normal bots' hotels never count.
+ */
+function endBankBacking(c: Ctx, builder: number, tile: number): void {
+  const s = c.s;
+  const mode = s.rules.bankBotMode ?? 'always'; // saves from before the rule keep the old behavior
+  if (mode === 'always' || s.bankBackingEnded || s.seats[builder].kind !== 'human') return;
+  const bots = s.seats.map((_, i) => i).filter((i) => isBankBot(s, i) && !s.players[i].bankrupt);
+  if (!bots.length) return;
+  s.bankBackingEnded = true;
+  const cash = s.rules.startingCash;
+  for (const i of bots) {
+    const p = s.players[i];
+    if (mode === 'cutoff') {
+      p.cash = cash;
+      log(c, i, `The bank stops backing ${name(c, i)}: it plays on $${cash}`);
+    } else {
+      p.cash = 0;
+      p.bankrupt = true;
+      p.leftTable = true;
+      if (s.auction) s.auction.active = s.auction.active.filter((k) => k !== i);
+      log(c, i, `${name(c, i)} leaves the table`);
+    }
+  }
+  c.ev.push({ type: 'bankBackingEnded', mode, seats: bots, by: builder, tile, cash });
 }
 
 function endBuildingAuction(c: Ctx, a: NonNullable<State['auction']>): void {

@@ -31,6 +31,7 @@
     { key: 'volumeEffects', label: 'Sound effects' },
   ];
   const STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+  const BRIGHTNESS = [70, 80, 90, 100, 110, 120, 130];
 
   let confirm = $state<{ kind: 'forfeit'; seat: number } | { kind: 'new' } | null>(null);
   const humans = $derived(gs ? gs.seats.map((s, i) => ({ s, i })).filter(({ s, i }) => s.kind === 'human' && !gs.players[i].bankrupt) : []);
@@ -72,6 +73,21 @@
         <label>Quality
           <select value={settings.quality} onchange={(e) => onsetting({ quality: (e.currentTarget as HTMLSelectElement).value as Settings['quality'] })}>
             <option value="auto">Auto</option><option value="high">High</option><option value="low">Low</option>
+          </select>
+        </label>
+        <label>Ambient occlusion
+          <select value={settings.ambientOcclusion ? 'on' : 'off'} onchange={(e) => onsetting({ ambientOcclusion: (e.currentTarget as HTMLSelectElement).value === 'on' })}>
+            <option value="off">Off</option><option value="on">On</option>
+          </select>
+        </label>
+        <label>Brightness
+          <select value={String(Math.round(settings.brightness * 10) * 10)} onchange={(e) => onsetting({ brightness: Number((e.currentTarget as HTMLSelectElement).value) / 100 })}>
+            {#each BRIGHTNESS as p}<option value={String(p)}>{p}%</option>{/each}
+          </select>
+        </label>
+        <label>Tone mapping
+          <select value={settings.toneMapping} onchange={(e) => onsetting({ toneMapping: (e.currentTarget as HTMLSelectElement).value as Settings['toneMapping'] })}>
+            <option value="aces">Filmic (ACES)</option><option value="agx">AgX</option><option value="neutral">Neutral</option>
           </select>
         </label>
         {#each VOLUMES as v (v.key)}

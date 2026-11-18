@@ -39,9 +39,16 @@ This file is the hand-off log for unattended work. A resumed session reads it fi
 - Trades and rent-free promises are implemented in the engine (pulled forward from M5 because bot games cannot finish without trading).
 - The scheduled auto-resume task and its heartbeat check were retired on 2026-11-17 (task deleted by the owner).
 
+## Owner feedback
+
+- [x] **Alpha refinements** (owner answers, 2026-11-18):
+  - houses 22% wide
+  - board fits between the side panels at every rotation and aspect
+  - Ambient occlusion / Brightness / Tone mapping settings
+  - `bankBotMode` rule (Classic: bank-backed bots leave after the first human hotel)
+
+  See DECISIONS.md, "Alpha refinements".
+
 ## Open questions for the owner
 
-1. House width: four houses at the SPEC's 30% of a tile cannot fit; using ≈19%.
-2. Board fills 88% of screen height; at 1080p the GO corner nearly touches the right panel. Drop to ≈84%?
-3. Ambient occlusion left out (soft shadows already give contact shading). Add on High?
-4. A bank-backed bot pays rent from the bank's unlimited money, which can keep games with one running indefinitely. Keep as specified, or cap/limit it?
+None. The four alpha questions were answered on 2026-11-18. The owner has more fixes and additions planned; they will arrive as a separate batch.

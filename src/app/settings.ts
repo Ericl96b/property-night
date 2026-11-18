@@ -16,7 +16,14 @@ export interface Settings {
   volumeMaster: number;
   volumeMusic: number;
   volumeEffects: number;
+  /** Graphics, independent of the Quality preset. */
+  ambientOcclusion: boolean;
+  /** Exposure multiplier, 0.7–1.3. */
+  brightness: number;
+  toneMapping: ToneMappingSetting;
 }
+
+export type ToneMappingSetting = 'aces' | 'agx' | 'neutral';
 
 export const DEFAULT_SETTINGS: Settings = {
   speed: 'normal',
@@ -31,6 +38,9 @@ export const DEFAULT_SETTINGS: Settings = {
   volumeMaster: 0.8,
   volumeMusic: 0.4,
   volumeEffects: 0.8,
+  ambientOcclusion: false,
+  brightness: 1,
+  toneMapping: 'aces',
 };
 
 const KEY = 'property-night.settings.v1';

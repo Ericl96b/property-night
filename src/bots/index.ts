@@ -4,11 +4,15 @@ import { chooseMedium } from './medium';
 
 /**
  * Bank-backed bot: never buys (the engine auctions what it lands on), never bids, never
- * trades, draws no cards and never goes to jail. It only rolls and ends its turn.
+ * trades, draws no cards and never goes to jail. It only rolls and ends its turn. Once the
+ * bank stops backing it (rule "bankBotMode: cutoff") it owns nothing to sell, so a debt it
+ * cannot pay means bankruptcy.
  */
 export function chooseBankBot(s: State, seat: number): Action | null {
-  if (s.turn.seat !== seat) return null;
   const acts = legalActions(s, seat);
+  const broke = acts.find((a) => a.type === 'declareBankruptcy');
+  if (broke) return broke;
+  if (s.turn.seat !== seat) return null;
   return acts.find((a) => a.type === 'roll') ?? acts.find((a) => a.type === 'endTurn') ?? null;
 }
 

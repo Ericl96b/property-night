@@ -5,6 +5,7 @@ import {
   buildBlocker,
   buildingCounts,
   buildingSellValue,
+  isBankBacked,
   liquidationValue,
   mortgageBlocker,
   mortgageValue,
@@ -222,6 +223,10 @@ export interface PlayerSummary {
   token: string;
   cash: number;
   bankrupt: boolean;
+  /** A bank-backed bot that left the table (rule "bankBotMode: remove"). */
+  leftTable: boolean;
+  /** Bank-backed bot whose money is still unlimited (shown as ∞). */
+  backed: boolean;
   inJail: boolean;
   jailCards: number;
   properties: number;
@@ -244,6 +249,8 @@ export function players(s: State): PlayerSummary[] {
       token: seat.token,
       cash: p.cash,
       bankrupt: p.bankrupt,
+      leftTable: !!p.leftTable,
+      backed: isBankBacked(s, i),
       inJail: !!p.jail,
       jailCards: p.gojf.length,
       properties: s.tiles.filter((t) => t.owner === i).length,

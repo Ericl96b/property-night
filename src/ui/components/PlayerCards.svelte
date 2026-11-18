@@ -21,14 +21,14 @@
       <div class="info">
         <div class="name">{p.name}{#if p.kind === 'bot'}<span class="tag">BOT</span>{:else if p.kind === 'bankBot'}<span class="tag">BANK</span>{/if}</div>
         <div class="sub">
-          {#if p.bankrupt}Bankrupt{:else}
+          {#if p.leftTable}Left the table{:else if p.bankrupt}Bankrupt{:else}
             {p.properties} deed{p.properties === 1 ? '' : 's'}{#if p.houses} · {p.houses} house{p.houses === 1 ? '' : 's'}{/if}{#if p.hotels} · {p.hotels} hotel{p.hotels === 1 ? '' : 's'}{/if}
             {#if p.inJail} · <b class="jail">In jail</b>{/if}{#if p.jailCards} · {p.jailCards} jail card{p.jailCards === 1 ? '' : 's'}{/if}
           {/if}
           {#each p.promises as pr}<div class="promise">◆ {pr}</div>{/each}
         </div>
       </div>
-      <div class="cash">{p.kind === 'bankBot' ? '∞' : money(cashOverride ? cashOverride[p.seat] : p.cash)}</div>
+      <div class="cash">{p.backed ? '∞' : p.leftTable ? '—' : money(cashOverride ? cashOverride[p.seat] : p.cash)}</div>
     </div>
   {/each}
 </div>

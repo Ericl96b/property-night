@@ -13,7 +13,7 @@
   import BoardEditor from './BoardEditor.svelte';
   import type { RulesPreset, RulesPresets } from '../../app/presets';
   import type { BoardPreset, BoardPresets } from '../../app/boardPresets';
-  import { KIND_HINT, defaultName, lobbyProblem, moveSeat, ordinal, renameForKind } from '../lobby';
+  import { KIND_HINT, bankBotHint, defaultName, lobbyProblem, moveSeat, ordinal, renameForKind } from '../lobby';
 
   let {
     onstart,
@@ -51,6 +51,8 @@
     void editingRules;
     void loadRules();
   });
+  /** Bank-backed bot hint follows the chosen preset's "bankBotMode" rule. */
+  const bankMode = $derived(rulesList.find((p) => p.id === rulesId)?.rules.bankBotMode ?? 'remove');
 
   let seats = $state<SeatConfig[]>([
     { kind: 'human', name: 'Player 1', token: 'teacup', color: PLAYER_COLORS[0] },
@@ -137,7 +139,7 @@
         </select>
         <button class="x" onclick={() => removeSeat(i)} disabled={seats.length <= 2} aria-label="Remove seat">×</button>
         {#if seat.kind !== 'human'}
-          <div class="sub hint-line"><span class="badge {seat.kind}">{seat.kind === 'bot' ? 'BOT' : 'BANK'}</span>{KIND_HINT[seat.kind]}</div>
+          <div class="sub hint-line"><span class="badge {seat.kind}">{seat.kind === 'bot' ? 'BOT' : 'BANK'}</span>{seat.kind === 'bankBot' ? bankBotHint(bankMode) : KIND_HINT[seat.kind]}</div>
         {:else}
           <div class="sub pad">
             <span class:bound={!!seat.controllerId}>{padLabel(seat.controllerId)}</span>

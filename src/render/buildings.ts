@@ -14,9 +14,9 @@ import {
   tileYaw,
 } from './layout';
 
-// Houses are ≈19% of the tile width so four stand on the band with clear gaps
-// (SPEC §10.5 says ≈30%, which cannot fit four across; see DECISIONS.md).
-const HOUSE = { w: TILE_W_PX * 0.19 * PX, d: 0.019, h: 0.0115, roof: 0.0095 };
+// Houses are ≈22% of the tile width: as wide as four can stand on the band with small gaps
+// (SPEC §10.5 says ≈30%, which cannot fit four across; owner-approved, see DECISIONS.md).
+const HOUSE = { w: TILE_W_PX * 0.22 * PX, d: 0.019, h: 0.0115, roof: 0.0095 };
 const HOTEL = { w: TILE_W_PX * 0.7 * PX, d: 0.024, h: 0.0150, roof: 0.0105 };
 const MAX_HOUSES = 32;
 const MAX_HOTELS = 12;

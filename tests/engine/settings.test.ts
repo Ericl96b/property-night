@@ -4,7 +4,7 @@
 // sellBackPercent, rentInJail, unimprovedSetMultiplier, jailFine, maxJailTurns, doublesRelease,
 // threeDoublesJail, freeParking (pot, fixed), mortgagePercent, unmortgageInterestPercent,
 // receiveMortgaged, doublesExtraRoll, tradingAllowed, promisesAllowed, bankruptToBank,
-// auctionTimer (controller tests). This file covers the rest.
+// auctionTimer (controller tests), bankBotMode (bankBot.test.ts). This file covers the rest.
 import { describe, expect, it } from 'vitest';
 import { apply, checkInvariants, legalActions } from '../../src/engine';
 import { act, edit, game, own, run, withDice } from './helpers';

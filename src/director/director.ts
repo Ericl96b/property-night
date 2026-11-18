@@ -215,6 +215,19 @@ export class Director implements DirectorLike {
           q.push(this.momentAnim({ kind: 'banner', title: `${name(e.seat)} is bankrupt`, subtitle: sub, seat: e.seat, tone: 'oxblood', duration: BANNER_TIME }));
           break;
         }
+        case 'bankBackingEnded': {
+          const bots = e.seats.map((i) => name(i)).join(' and ');
+          if (e.mode === 'remove') {
+            for (const i of e.seats) {
+              const id = this.tokenOf(state, i);
+              q.push(this.instant('leave', () => sc.tokens.remove(id)));
+            }
+          }
+          const title = e.mode === 'remove' ? `${bots} ${e.seats.length > 1 ? 'leave' : 'leaves'} the table` : `The bank stops backing ${bots}`;
+          const sub = `${name(e.by)} built the first hotel${e.mode === 'cutoff' ? ` · now playing on $${e.cash.toLocaleString('en-US')}` : ''}`;
+          q.push(this.momentAnim({ kind: 'banner', title, subtitle: sub, seat: e.seats[0], tone: 'brass', duration: BANNER_TIME }));
+          break;
+        }
         case 'payment': {
           if (e.reason === 'bankruptcy') break;
           if (e.amount > 0) q.push(this.instant('coins', () => this.sound.coins(e.amount)));
