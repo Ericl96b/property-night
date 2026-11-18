@@ -17,6 +17,8 @@ import App from './ui/App.svelte';
 import { openKV } from './storage/db';
 import { RulesPresets } from './app/presets';
 import { BoardPresets, printView } from './app/boardPresets';
+import { AUTOSAVE_ID, Saves, makeSave, type SaveFile } from './app/saves';
+import { downloadText } from './app/presets';
 import { CLASSIC_RULES } from './engine';
 
 async function boot(): Promise<void> {
@@ -49,11 +51,13 @@ async function boot(): Promise<void> {
   const kv = await openKV();
   const presets = new RulesPresets(kv);
   const boards = new BoardPresets(kv);
+  const saves = new Saves(kv);
   // The board texture is regenerated only when the printed board changes (never during play).
   let boardKey = JSON.stringify(printView(CLASSIC_BOARD, CLASSIC_RULES));
 
   const applySettings = () => {
     input.swapNintendo = settings.swapNintendo;
+    controller.undoEnabled = settings.undo;
     scene.setSpeed(settings.speed);
     controller.speed = settings.speed;
     scene.camera.settings.rotation = settings.boardRotation;
@@ -73,7 +77,42 @@ async function boot(): Promise<void> {
   overlay.className = 'overlay-root';
   root.append(overlay);
 
+  const ensureBoard = async (board: import('./data/classicBoard').BoardData, rules: import('./engine').Rules) => {
+    const view = printView(board, rules);
+    const key = JSON.stringify(view);
+    if (key !== boardKey) {
+      await scene.setBoard(view);
+      boardKey = key;
+    }
+  };
+
+  // Autosave after every action (debounced so a burst of bot actions writes once).
+  let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+  let createdAt = Date.now();
+  const snapshotSave = (id: string, name: string): SaveFile =>
+    makeSave(id, name, controller.state, controller.actions, controller.seed, scene.camera.side, { createdAt });
+  controller.onChange = () => {
+    if (autosaveTimer) clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      if (controller.state) void saves.autosave(snapshotSave(AUTOSAVE_ID, 'Autosave'));
+    }, 250);
+  };
+
+  const resume = async (raw: SaveFile) => {
+    // Plain copy: saves picked in the UI may be reactive proxies, which IndexedDB cannot store.
+    const f: SaveFile = JSON.parse(JSON.stringify(raw));
+    renderPortraits(f.snapshot.seats.map((s) => ({ token: s.token, color: s.color })));
+    await ensureBoard(f.snapshot.board, f.snapshot.rules);
+    createdAt = f.createdAt;
+    controller.load(f.snapshot, f.actions, f.seed);
+    input.clearBindings();
+    f.snapshot.seats.forEach((s, i) => s.controllerId && input.bind(s.controllerId, i));
+    scene.camera.toSide((f.view?.cameraSide ?? f.snapshot.seats[f.snapshot.turn.seat].boardSide) as 0 | 1 | 2 | 3, true);
+    scene.renderer.requestRender();
+  };
+
   const startGame = (cfg: NewGameConfig) => {
+    createdAt = Date.now();
     renderPortraits(cfg.seats.map((s) => ({ token: s.token ?? 'teacup', color: s.color ?? '#7B3FE4' })));
     controller.start(cfg);
     // Seats are shuffled into turn order: bind each controller to its seat's final index.
@@ -94,6 +133,28 @@ async function boot(): Promise<void> {
       input,
       presets,
       boards,
+      saves,
+      oncontinue: async () => {
+        const f = await saves.continueGame();
+        if (f) await resume(f);
+      },
+      onloadsave: (f: SaveFile) => void resume(f),
+      onimport: (text: string) => {
+        try {
+          const f = saves.parseImport(text);
+          void resume(f);
+          return null;
+        } catch (e) {
+          return (e as Error).message;
+        }
+      },
+      onsaveslot: async (slot: number, name: string) => {
+        await saves.saveSlot(slot, snapshotSave(`slot-${slot}`, name));
+      },
+      onexport: () => {
+        const f = snapshotSave('export', `Game ${new Date().toLocaleDateString()}`);
+        downloadText(`property-night-${new Date().toISOString().slice(0, 10)}.save.json`, saves.exportJSON(f));
+      },
       settings,
       onstart: async (seats: SeatConfig[], randomOrder: boolean, rulesId: string, boardId: string) => {
         const seed = Number(params.get('seed') ?? Math.floor(Math.random() * 2 ** 31));
@@ -103,12 +164,7 @@ async function boot(): Promise<void> {
         const bp = await boards.get(boardId);
         const board = JSON.parse(JSON.stringify(bp.board));
         const decks = JSON.parse(JSON.stringify(bp.decks));
-        const view = printView(board, rules);
-        const key = JSON.stringify(view);
-        if (key !== boardKey) {
-          await scene.setBoard(view);
-          boardKey = key;
-        }
+        await ensureBoard(board, rules);
         startGame({ seats, seed, rules, board, decks, turnOrder: randomOrder ? 'random' : 'fixed' });
       },
       onsetting: async (patch: Partial<Settings>) => {
@@ -122,6 +178,14 @@ async function boot(): Promise<void> {
         input.clearBindings();
         controller.reset();
         scene.tokens.clear();
+        // Leave a clean board behind: no owner discs, stamps, ribbons, locks or buildings.
+        for (let i = 0; i < 40; i++) {
+          scene.decals.setOwner(i, null);
+          scene.decals.setMortgaged(i, false);
+          scene.decals.setPromise(i, false);
+          scene.decals.setPledged(i, false);
+          scene.buildings.set(i, 0, false);
+        }
         scene.renderer.requestRender();
       },
       onfullscreen: toggleFullscreen,
@@ -188,7 +252,7 @@ async function boot(): Promise<void> {
     f(s);
     controller.load(s);
   };
-  (window as unknown as { __pn: unknown }).__pn = { scene, controller, director, settings, forceDice, patchState, input, app };
+  (window as unknown as { __pn: unknown }).__pn = { scene, controller, director, settings, forceDice, patchState, input, app, saves };
   scene.renderer.requestRender();
   setTimeout(() => splash.classList.add('gone'), 50);
   setTimeout(() => splash.remove(), 700);

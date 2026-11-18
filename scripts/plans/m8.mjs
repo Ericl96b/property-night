@@ -4,6 +4,8 @@ export default {
   url: 'http://localhost:5173/?quality=high&seed=4',
   steps: [
     { eval: H, label: 'helpers' },
+    { eval: () => window.__h.click(/^\s*New game\s*$/), label: 'New game from the main menu' },
+    { wait: 300 },
     { eval: () => window.__h.click(/Edit board & cards/), label: 'open board editor' },
     { until: () => !!document.querySelector('.boards'), label: 'editor' },
     { wait: 300 },

@@ -13,6 +13,7 @@
     onforfeit,
     onnewgame,
     onfullscreen,
+    onsave,
   }: {
     gs: State | null;
     settings: Settings;
@@ -21,6 +22,7 @@
     onforfeit: (seat: number) => void;
     onnewgame: () => void;
     onfullscreen: () => void;
+    onsave?: () => void;
   } = $props();
 
   let confirm = $state<{ kind: 'forfeit'; seat: number } | { kind: 'new' } | null>(null);
@@ -36,8 +38,8 @@
         <div class="q">Forfeit {gs?.seats[confirm.seat].name}? Their cash returns to the bank, buildings are sold back and every deed is auctioned.</div>
         <ActionButton label="Yes, forfeit" glyph="confirm" primary onclick={() => { const c = confirm; confirm = null; if (c?.kind === 'forfeit') onforfeit(c.seat); }} />
       {:else}
-        <div class="q">Leave this game and start a new one? The current game is not saved yet (saving arrives with save slots).</div>
-        <ActionButton label="Yes, new game" glyph="confirm" primary onclick={() => { confirm = null; onnewgame(); }} />
+        <div class="q">Leave this game? It is autosaved, so Continue on the main menu brings it back.</div>
+        <ActionButton label="Yes, quit to menu" glyph="confirm" primary onclick={() => { confirm = null; onnewgame(); }} />
       {/if}
       <ActionButton label="Cancel" glyph="back" onclick={() => (confirm = null)} />
     </div>
@@ -45,13 +47,14 @@
     <div class="cols">
       <div class="col">
         <ActionButton label="Resume" glyph="confirm" primary onclick={onresume} />
+        {#if gs && onsave}<ActionButton label="Save game…" onclick={onsave} />{/if}
         <ActionButton label="Fullscreen" onclick={onfullscreen} />
         {#if gs && gs.phase !== 'gameOver'}
           {#each humans as h (h.i)}
             <ActionButton label={`Forfeit ${h.s.name}`} onclick={() => (confirm = { kind: 'forfeit', seat: h.i })} />
           {/each}
         {/if}
-        <ActionButton label="New game" onclick={() => (confirm = { kind: 'new' })} />
+        {#if gs}<ActionButton label="Quit to menu" onclick={() => (confirm = { kind: 'new' })} />{/if}
       </div>
       <div class="col settings">
         <label>Speed
@@ -66,6 +69,7 @@
         </label>
         <label class="chk"><input type="checkbox" checked={settings.boardRotation} onchange={(e) => onsetting({ boardRotation: (e.currentTarget as HTMLInputElement).checked })} /> Board rotation</label>
         <label class="chk"><input type="checkbox" checked={settings.cameraFollow} onchange={(e) => onsetting({ cameraFollow: (e.currentTarget as HTMLInputElement).checked })} /> Camera follow</label>
+        <label class="chk"><input type="checkbox" checked={settings.undo} onchange={(e) => onsetting({ undo: (e.currentTarget as HTMLInputElement).checked })} /> Undo last decision</label>
         <label class="chk"><input type="checkbox" checked={settings.swapNintendo} onchange={(e) => onsetting({ swapNintendo: (e.currentTarget as HTMLInputElement).checked })} /> Swap Confirm/Back on Nintendo pads</label>
         <label class="chk"><input type="checkbox" checked={settings.reduceMotion} onchange={(e) => onsetting({ reduceMotion: (e.currentTarget as HTMLInputElement).checked })} /> Reduce motion</label>
         <label>Big payment from $

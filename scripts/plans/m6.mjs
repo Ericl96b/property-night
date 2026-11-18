@@ -6,6 +6,8 @@ export default {
   url: 'http://localhost:5173/?quality=low&seed=4',
   steps: [
     { eval: H, label: 'helpers' },
+    { eval: () => window.__h.click(/^\s*New game\s*$/), label: 'New game from the main menu' },
+    { wait: 300 },
     { eval: () => window.__h.click(/Edit rules/), label: 'open rules editor' },
     { until: () => !!document.querySelector('.rules'), label: 'editor' },
     { wait: 300 },

@@ -25,6 +25,8 @@ export default {
   url: 'http://localhost:5173/?quality=low&seed=4',
   steps: [
     { eval: H, label: 'helpers' },
+    { eval: () => window.__h.click(/^\s*New game\s*$/), label: 'New game from the main menu' },
+    { wait: 300 },
     { eval: FAKE, label: 'fake pads' },
     { wait: 300 },
     { eval: async () => (await window.__press(0, 3), await window.__press(1, 3), [...document.querySelectorAll('.pad span')].map((s) => s.textContent)), label: 'join both pads' },

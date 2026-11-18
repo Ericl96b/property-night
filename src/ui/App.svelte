@@ -11,6 +11,9 @@
   import LogPanel from './components/LogPanel.svelte';
   import TradePanel from './components/TradePanel.svelte';
   import LoanPanel from './components/LoanPanel.svelte';
+  import MainMenu from './components/MainMenu.svelte';
+  import SavePanel from './components/SavePanel.svelte';
+  import type { SaveFile, Saves } from '../app/saves';
   import { counterOf, partners } from './trade';
   import type { TradeOffer } from '../engine';
   import PlayerCards from './components/PlayerCards.svelte';
@@ -30,6 +33,12 @@
     input,
     presets,
     boards,
+    saves,
+    oncontinue,
+    onloadsave,
+    onimport,
+    onsaveslot,
+    onexport,
     settings,
     onstart,
     onsetting,
@@ -40,6 +49,12 @@
     input: InputManager;
     presets: import('../app/presets').RulesPresets;
     boards: import('../app/boardPresets').BoardPresets;
+    saves: Saves;
+    oncontinue: () => void;
+    onloadsave: (f: SaveFile) => void;
+    onimport: (text: string) => string | null;
+    onsaveslot: (slot: number, name: string) => Promise<void>;
+    onexport: () => void;
     settings: Settings;
     onstart: (seats: SeatConfig[], randomOrder: boolean, rulesId: string, boardId: string) => void;
     onsetting: (patch: Partial<Settings>) => void;
@@ -63,6 +78,9 @@
   let waitingSeat = $state<number | null>(null);
   let navFocus = false;
   let loanSeat = $state<number | null>(null);
+  let screen = $state<'menu' | 'setup'>('menu');
+  let savingOpen = $state(false);
+  let menuSettings = $state(false);
   let compose = $state<{ seat: number; initial: TradeOffer | null; counter: boolean } | null>(null);
   const glyphCtx = $state({ family: 'playstation' as 'playstation' | 'nintendo', swap: false });
   setContext('glyphs', glyphCtx);
@@ -176,7 +194,7 @@
     return amt <= gs!.players[seat].cash ? amt : null;
   }
 
-  const PANELS = ['.remap', '.pause', '.padlost', '.logp', '.loans', '.trade', '.manage', '.auction', '.setup', '.context', '.banner'];
+  const PANELS = ['.remap', '.savep', '.pause', '.padlost', '.logp', '.loans', '.trade', '.manage', '.auction', '.setup', '.context', '.banner'];
   function topPanel(): Element | null {
     const stage = document.querySelector('.stage');
     if (!stage) return null;
@@ -322,7 +340,10 @@
       return true;
     }
     if (gs.phase === 'gameOver') {
-      if (i === 'confirm') onnewgame();
+      if (i === 'confirm') {
+        screen = 'menu';
+        onnewgame();
+      }
       return true;
     }
     const buttons = primaryButtons(gs, seatActions);
@@ -341,7 +362,15 @@
 
 <div class="stage" style="transform: translate({offset.x}px, {offset.y}px) scale({scale})">
   {#if !started || !view || !gs}
-    <Setup {onstart} {input} {pads} {presets} {boards} />
+    {#if screen === 'menu'}
+      <MainMenu {saves} {oncontinue} onnew={() => (screen = 'setup')} onload={onloadsave} {onimport} onsettings={() => (menuSettings = true)} />
+      {#if menuSettings}
+        <PauseMenu gs={null} {settings} {onsetting} onresume={() => (menuSettings = false)} onforfeit={() => {}} onnewgame={() => {}} {onfullscreen} />
+      {/if}
+    {:else}
+      <Setup {onstart} {input} {pads} {presets} {boards} />
+      <button class="menuback" onclick={() => (screen = 'menu')}>‹ Main menu</button>
+    {/if}
   {:else}
     <PlayerCards players={players(gs)} {cashOverride} {shake} />
     <ContextPanel {gs} {actions} busy={view.busy} {actingName} error={view.error} onaction={act}>
@@ -354,6 +383,9 @@
             <option value="">Triples! Choose any space…</option>
             {#each gs.board.tiles as t}<option value={t.index}>{t.name}</option>{/each}
           </select>
+        {/if}
+        {#if view!.undo}
+          <ActionButton label={`Undo ${view!.undo}`} onclick={() => controller.undo()} />
         {/if}
         {#if gs.rules.loans && actor === gs.turn.seat && ['preRoll', 'postRoll', 'buy'].includes(gs.phase) && gs.seats[gs.turn.seat].kind === 'human'}
           <ActionButton label="Bank loans" disabled={view!.busy} onclick={() => (loanSeat = gs.turn.seat)} />
@@ -417,7 +449,7 @@
         <div class="panel banner">
           <div class="eyebrow">Game over</div>
           <div class="big">{gs.winner === null ? 'No winner' : `${gs.seats[gs.winner].name} wins!`}</div>
-          <div class="again"><ActionButton label="New game" glyph="confirm" primary onclick={onnewgame} /></div>
+          <div class="again"><ActionButton label="Main menu" glyph="confirm" primary onclick={() => { screen = 'menu'; onnewgame(); }} /></div>
         </div>
       </div>
     {/if}
@@ -429,9 +461,13 @@
         {onsetting}
         onresume={() => setPaused(false)}
         onforfeit={(seat) => { setPaused(false); act({ type: 'forfeit', seat }); }}
-        onnewgame={() => { setPaused(false); onnewgame(); }}
+        onnewgame={() => { setPaused(false); screen = 'menu'; onnewgame(); }}
         {onfullscreen}
+        onsave={() => (savingOpen = true)}
       />
+      {#if savingOpen}
+        <SavePanel {saves} onsave={onsaveslot} {onexport} onclose={() => (savingOpen = false)} />
+      {/if}
     {/if}
   {/if}
 </div>
@@ -515,6 +551,19 @@
     border: 1.5px solid rgba(43, 33, 25, 0.3);
     padding: 0 10px;
     background: #fff;
+  }
+  .menuback {
+    position: absolute;
+    left: 32px;
+    top: 32px;
+    height: 48px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 10px;
+    background: rgba(251, 246, 234, 0.9);
+    font: 700 17px 'Source Sans 3', sans-serif;
+    cursor: pointer;
+    pointer-events: auto;
   }
   .menu img {
     width: 34px;

@@ -27,7 +27,7 @@ Each human seat owns one controller (join from the setup screen by pressing any 
 
 Review URL parameters: `?quality=high|low`, `?seed=N`, `?speed=slow|normal|fast|instant`, `?auto=human,bot,bank` (start a game immediately).
 
-Review screenshots: [docs/m0/](docs/m0/) (visual prototype), [docs/m2/](docs/m2/), [docs/m3/](docs/m3/), [docs/m4/](docs/m4/), [docs/m5/](docs/m5/), [docs/m6/](docs/m6/), [docs/m7/](docs/m7/), [docs/m8/](docs/m8/).
+Review screenshots: [docs/m0/](docs/m0/) (visual prototype), [docs/m2/](docs/m2/), [docs/m3/](docs/m3/), [docs/m4/](docs/m4/), [docs/m5/](docs/m5/), [docs/m6/](docs/m6/), [docs/m7/](docs/m7/), [docs/m8/](docs/m8/), [docs/m9/](docs/m9/).
 
 ## Stack
 
@@ -68,4 +68,4 @@ src/
 tests/       Vitest suites
 ```
 
-Judgement calls where the spec is silent are logged in [DECISIONS.md](DECISIONS.md). Milestone status and open questions: [docs/PROGRESS.md](docs/PROGRESS.md).
+Judgement calls where the spec is silent are logged in [DECISIONS.md](DECISIONS.md). Milestone status and open questions: [docs/PROGRESS.md](docs/PROGRESS.md). Resuming in a new session: [docs/HANDOFF.md](docs/HANDOFF.md).

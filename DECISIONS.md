@@ -131,3 +131,12 @@ Where SPEC.md is silent, the decision taken is recorded here (SPEC §0).
 - **Tax amounts** belong to the rules (§5), so the board editor only renames tax tiles. The printed board follows the game's rules: GO salary and tax lines ("Pay $200", "Pay 10%", or "$200 or 10%").
 - **Cards:** text + one effect from the SPEC list; at most one Get Out of Jail Free card per deck (extra ones are dropped); an empty deck falls back to Classic. "Move to" card text can contain `{tile}`, which prints the target's current name, so renamed boards stay consistent (the default cards use it).
 - **Texture regeneration:** the board face is redrawn at game start only when the printed board differs from the current texture (board preset or rules changed). It never redraws during play.
+
+## Milestone 9 — saves, autosave, resume, undo, log (2026-11-17)
+
+- **Save format** follows SPEC §12: `{ version, createdAt, rulesPreset (copy), boardPreset (copy), seats, seed, actions, snapshot, view: { cameraSide } }` plus a name and a one-line summary. The snapshot is the source of truth on load; the action list replays from the seed to the same snapshot (tested), so saves can be audited.
+- **Autosave** after every action (debounced 250 ms so a burst of bot actions writes once) to the `autosave` record in IndexedDB. **Continue** on the main menu resumes it, unless that game is over. **Up to 10 named slots** from the pause menu ("Save game…"), loaded from the main menu; slots can be overwritten or deleted. **Export** downloads the save as JSON; **Import** validates the version and the game state's invariants before resuming.
+- **Resume restores everything:** state (promises, loans, auctions and trades mid-flight), the action log, the seed, the camera side, controller bindings (by device id on the seats) and the board texture.
+- **Undo** (setting, default on): reverts the last decision — buy, build, sell, mortgage, unmortgage, or a trade sent — until the next roll or card, or until another player acts (bots included), or the turn ends. Only the latest decision is undoable.
+- **Main menu:** Continue, New game, Load game, Import save, Settings. Presets and controllers are on the new-game screen. "Quit to menu" in the pause menu replaces "New game" (the game is autosaved). Quitting clears tokens, decals and buildings from the board.
+- **Game log:** the full log (newest first) is the read-only Select/L view from M4; the save keeps the last 200 lines plus the complete action list.

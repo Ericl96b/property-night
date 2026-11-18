@@ -16,6 +16,16 @@ import { chooseAction } from '../bots';
 import type { CardView, DirectorLike, Moment } from '../director/director';
 import type { Speed } from '../director/queue';
 
+/** Decisions that can be undone (SPEC §9): buy, build, mortgage, trade sent. */
+const UNDOABLE = new Set<Action['type']>(['buy', 'build', 'sell', 'mortgage', 'unmortgage', 'proposeTrade']);
+
+export interface UndoPoint {
+  state: State;
+  actions: number;
+  seat: number;
+  label: string;
+}
+
 export interface GameView {
   /** State as currently shown (lags the engine while animations play). */
   state: State;
@@ -28,6 +38,8 @@ export interface GameView {
   auctionDeadline: number | null;
   error: string | null;
   events: GameEvent[];
+  /** Label of the decision Undo would revert, or null. */
+  undo: string | null;
 }
 
 export interface Clock {
@@ -62,6 +74,13 @@ export class GameController {
   speed: Speed = 'normal';
   /** Paused (menu open, disconnect): bots and timers wait. */
   paused = false;
+  /** Every action applied since the game began (save format, replay). */
+  actions: Action[] = [];
+  seed = 0;
+  undoEnabled = true;
+  private undoPoint: UndoPoint | null = null;
+  /** Called after every applied action (autosave). */
+  onChange: () => void = () => {};
 
   constructor(
     private director: DirectorLike | null,
@@ -86,7 +105,9 @@ export class GameController {
   };
 
   start(cfg: NewGameConfig): void {
-    this.load(newGame(cfg));
+    this.seed = cfg.seed;
+    this.load(newGame(cfg), []);
+    this.onChange();
   }
 
   /** Back to the setup screen. */
@@ -98,11 +119,16 @@ export class GameController {
     this.card = null;
     this.moment = null;
     this.paused = false;
+    this.actions = [];
+    this.undoPoint = null;
     this.emit();
   }
 
-  load(state: State): void {
+  load(state: State, actions: Action[] = this.actions, seed = this.seed): void {
     this.stopTimers();
+    this.actions = [...actions];
+    this.seed = seed;
+    this.undoPoint = null;
     this.state = state;
     this.shown = state;
     this.director?.sync(state);
@@ -120,6 +146,7 @@ export class GameController {
       auctionDeadline: this.auctionDeadline,
       error: this.error,
       events: this.lastEvents,
+      undo: this.undoEnabled && this.undoPoint && !this.director?.busy ? this.undoPoint.label : null,
     };
   }
 
@@ -151,6 +178,7 @@ export class GameController {
       this.director.skip();
     }
     let events: GameEvent[];
+    const before = this.state;
     try {
       const r = apply(this.state, action);
       this.state = r.state;
@@ -165,6 +193,9 @@ export class GameController {
     }
     this.error = null;
     this.lastEvents = events;
+    this.actions.push(action);
+    this.trackUndo(before, action, events);
+    this.onChange();
     if (this.director) {
       this.director.play(events, this.state);
       this.emit();
@@ -173,6 +204,27 @@ export class GameController {
     }
     this.afterAction(action, events);
     return null;
+  }
+
+  private trackUndo(before: State, action: Action, events: GameEvent[]): void {
+    const human = action.seat >= 0 && before.seats[action.seat]?.kind === 'human';
+    const cardOrRoll = action.type === 'roll' || events.some((e) => e.type === 'cardDrawn' || e.type === 'diceRolled');
+    if (UNDOABLE.has(action.type) && human && !cardOrRoll) {
+      this.undoPoint = { state: before, actions: this.actions.length - 1, seat: action.seat, label: undoLabel(before, action) };
+    } else if (!this.undoPoint || cardOrRoll || action.seat !== this.undoPoint.seat || action.type === 'endTurn') {
+      // The next roll or card, or another player acting, ends the undo window.
+      this.undoPoint = null;
+    }
+  }
+
+  /** Undo the last decision (SPEC §9). */
+  undo(): boolean {
+    const u = this.undoPoint;
+    if (!u || !this.undoEnabled) return false;
+    this.director?.skip();
+    this.load(u.state, this.actions.slice(0, u.actions));
+    this.onChange();
+    return true;
   }
 
   /** Skip running animations (Confirm). */
@@ -250,5 +302,25 @@ export class GameController {
   setPaused(p: boolean): void {
     this.paused = p;
     if (!p) this.pump();
+  }
+}
+
+function undoLabel(s: State, a: Action): string {
+  const t = (i: number) => s.board.tiles[i].name;
+  switch (a.type) {
+    case 'buy':
+      return `buying ${t(s.pendingBuy!)}`;
+    case 'build':
+      return `building on ${t(a.tile)}`;
+    case 'sell':
+      return `selling on ${t(a.tile)}`;
+    case 'mortgage':
+      return `mortgaging ${t(a.tile)}`;
+    case 'unmortgage':
+      return `unmortgaging ${t(a.tile)}`;
+    case 'proposeTrade':
+      return 'the trade offer';
+    default:
+      return 'the last decision';
   }
 }
