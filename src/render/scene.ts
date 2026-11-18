@@ -8,6 +8,8 @@ import { createBoardTexture } from './boardTexture';
 import { Buildings } from './buildings';
 import { CameraDirector } from './cameraDirector';
 import { Decals } from './decals';
+import { createDecks } from './decks';
+import { Signs } from './signs';
 import { Dice } from './dice';
 import { createLighting, type LightRig } from './lighting';
 import { type QualityProfile, type QualitySetting, gpuName, profileFor, resolveLevel } from './quality';
@@ -33,6 +35,10 @@ export class GameScene {
   board!: BoardObject;
   tokens = new TokenLayer();
   buildings = new Buildings();
+  /** SOLD signs on owned properties. */
+  signs!: Signs;
+  /** Chance and Community Chest card stacks. */
+  decks!: THREE.Group;
   decals!: Decals;
   dice!: Dice;
   quality!: QualityProfile;
@@ -71,6 +77,10 @@ export class GameScene {
     scene.add(s.decals.group, s.tokens.group, s.buildings.group);
     s.dice = new Dice(s.quality.diceAtlas);
     scene.add(s.dice.group);
+    // Fonts are ready by now (the board face waited for them).
+    s.signs = new Signs();
+    s.decks = await createDecks(s.renderer.maxAnisotropy);
+    scene.add(s.signs.group, s.decks);
 
     const u0 = performance.now();
     gl.initTexture(bt.texture);
@@ -81,7 +91,9 @@ export class GameScene {
       const q = s.queue.update(dt);
       const c = s.camera.update(dt);
       s.tokens.faceYaw(s.camera.viewYaw);
-      return q || c;
+      s.signs.faceYaw(s.camera.viewYaw);
+      const g = s.signs.update(dt);
+      return q || c || g;
     });
     return s;
   }
@@ -89,6 +101,7 @@ export class GameScene {
   setSpeed(speed: AnimationQueue['speed']): void {
     this.queue.speed = speed;
     this.camera.speed = this.queue.factor;
+    this.signs.speed = this.queue.factor;
   }
 
   /** Switch quality: regenerates board/table textures, shadow map and the post chain. */

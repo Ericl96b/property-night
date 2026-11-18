@@ -2,7 +2,13 @@
 // speed-scaled. The engine is the source of truth; the director only shows it.
 
 export type Speed = 'slow' | 'normal' | 'fast' | 'instant';
-export const SPEED_FACTOR: Record<Speed, number> = { slow: 0.6, normal: 1, fast: 2, instant: Infinity };
+/**
+ * Owner request (2026-11-18): everything slower. "slow" is labeled Relaxed (new, slowest);
+ * Normal is the old Slow; Fast is the old Normal; the old 2× Fast was dropped. Keys are kept
+ * so stored settings and `?speed=` stay valid.
+ */
+export const SPEED_FACTOR: Record<Speed, number> = { slow: 0.45, normal: 0.6, fast: 1, instant: Infinity };
+export const SPEED_LABEL: Record<Speed, string> = { slow: 'Relaxed', normal: 'Normal', fast: 'Fast', instant: 'Instant' };
 
 export interface Animation {
   /** Called once when the animation starts. May return a tick (true while running). */

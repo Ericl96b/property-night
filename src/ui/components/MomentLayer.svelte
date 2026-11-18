@@ -26,11 +26,11 @@
   }
 
   onMount(() => {
-    if (moment.kind === 'payment') points = { from: seatPoint(moment.from), to: seatPoint(moment.to) };
+    if (moment.kind === 'payment' || moment.kind === 'transfer') points = { from: seatPoint(moment.from), to: seatPoint(moment.to) };
   });
 
   const k = $derived(Math.max(0.05, speed === Infinity ? 1000 : speed));
-  const notes = $derived(moment.kind === 'payment' ? breakdown(moment.amount) : { notes: [], rest: 0 });
+  const notes = $derived(moment.kind === 'payment' || moment.kind === 'transfer' ? breakdown(moment.amount) : { notes: [], rest: 0 });
   const nameOf = (c: number | 'bank') => (c === 'bank' ? 'The bank' : gs.seats[c].name);
   const portraitOf = (c: number | 'bank') => (c === 'bank' ? null : getPortrait(gs.seats[c].token, gs.seats[c].color));
   const what = $derived(
@@ -65,6 +65,23 @@
     {/each}
     {#if notes.rest > 0}
       <div class="note chip" style="--fx:{points.from.x}px; --fy:{points.from.y}px; --tx:{points.to.x}px; --ty:{points.to.y}px; --delay:{(0.35 + notes.notes.length * 0.07) / k}s; --dur:{1.0 / k}s; --rot:0deg">
+        +{money(notes.rest)}
+      </div>
+    {/if}
+  {/if}
+{:else if moment.kind === 'transfer'}
+  <!-- Small payment: bills only, between the player tabs (or the bank at the board center). -->
+  {#if points}
+    {#each notes.notes as v, i}
+      <div
+        class="note small"
+        style="--fx:{points.from.x}px; --fy:{points.from.y}px; --tx:{points.to.x}px; --ty:{points.to.y}px; --delay:{(0.05 + i * 0.05) / k}s; --dur:{(moment.duration * 0.75) / k}s; --rot:{(i % 2 ? 1 : -1) * (4 + i * 2)}deg"
+      >
+        <Banknote value={v} width={110} />
+      </div>
+    {/each}
+    {#if notes.rest > 0}
+      <div class="note small chip" style="--fx:{points.from.x}px; --fy:{points.from.y}px; --tx:{points.to.x}px; --ty:{points.to.y}px; --delay:{(0.05 + notes.notes.length * 0.05) / k}s; --dur:{(moment.duration * 0.75) / k}s; --rot:0deg">
         +{money(notes.rest)}
       </div>
     {/if}
@@ -194,6 +211,23 @@
     100% {
       opacity: 0;
       transform: translate(calc(var(--tx) - 70px), calc(var(--ty) - 35px)) rotate(var(--rot)) scale(0.85);
+    }
+  }
+  .note.small {
+    animation-name: fly-small;
+  }
+  @keyframes fly-small {
+    0% {
+      opacity: 0;
+      transform: translate(calc(var(--fx) - 55px), calc(var(--fy) - 27px)) rotate(0deg) scale(0.7);
+    }
+    15%,
+    85% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translate(calc(var(--tx) - 55px), calc(var(--ty) - 27px)) rotate(var(--rot)) scale(0.9);
     }
   }
   .chip {

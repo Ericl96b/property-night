@@ -32,6 +32,16 @@ export interface TileFrame {
   angle: number;
 }
 
+/**
+ * Board side a tile belongs to (0 bottom, 1 left, 2 top, 3 right): 0–9, 10–19, 20–29, 30–39.
+ * The camera turns to the side the active token stands on (owner request, 2026-11-18).
+ * Jail (the in-jail pseudo-tile 40) counts as tile 10.
+ */
+export function sideOfTile(tile: number): Side {
+  const t = tile === 40 ? 10 : ((tile % 40) + 40) % 40;
+  return Math.floor(t / 10) as Side;
+}
+
 export function isCorner(index: number): boolean {
   return index % 10 === 0;
 }
@@ -162,4 +172,28 @@ function cornerAnchor(index: number): [number, number] {
 export const HOUSE_PITCH_PX = TILE_W_PX / 4;
 export function houseSlotLX(slot: number): number {
   return (slot - 1.5) * HOUSE_PITCH_PX;
+}
+
+/**
+ * The printed Chance / Community Chest deck outlines (top-left of the unrotated box, reference
+ * px). The 3D card stacks lie on them: DECK_BOX_W × DECK_BOX_H rotated DECK_ANGLE (CSS sense,
+ * −45°) about the box center. The dice physics treats the stacks as obstacles.
+ */
+export const DECK_SPOTS = {
+  chance: { x: CORNER_PX + 46, y: CORNER_PX + 92 },
+  chest: { x: CORNER_PX + 514, y: CORNER_PX + 532 },
+} as const;
+export const DECK_BOX_W = 176 + 3;
+export const DECK_BOX_H = 112 + 3;
+export const DECK_ANGLE = -Math.PI / 4;
+/** Card stack size in board units (a little inside the printed outline) and height. */
+export const DECK_STACK = { w: 0.168, d: 0.104, h: 0.0075 };
+
+/** World center (x, z) and yaw of each card stack. */
+export function deckFrames(): { deck: 'chance' | 'chest'; x: number; z: number; yaw: number }[] {
+  return (['chance', 'chest'] as const).map((deck) => {
+    const s = DECK_SPOTS[deck];
+    const [x, z] = refToWorld(s.x + DECK_BOX_W / 2, s.y + DECK_BOX_H / 2);
+    return { deck, x, z, yaw: -DECK_ANGLE };
+  });
 }

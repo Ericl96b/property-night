@@ -26,7 +26,7 @@ Where SPEC.md is silent, the decision taken is recorded here (SPEC §0).
 ## Milestone 0 — visual prototype (2026-11-17)
 
 - **House width:** SPEC §10.5 asks for houses ≈30% of the tile width *and* four across the band with gaps. Four at 30% would need 120% of the width, so houses were ≈19% of the tile width (4 fit with ≈5% gaps). Hotels span 70% as specified. *Widened to 22% on 2026-11-18 (see Alpha refinements).*
-- **Building placement covers band names:** houses stand on the color band (SPEC §10.5/§16), so a fully built street partly hides its printed name, as on a real board. The deed panel (M2) always shows the name.
+- **Building placement covers band names:** houses stand on the color band (SPEC §10.5/§16), so a fully built street partly hides its printed name, as on a real board. The deed panel (M2) always shows the name. *Since batch 2 (2026-11-18) names print under the band, so houses no longer hide them.*
 - **Board-face optical sizing:** Canvas 2D cannot set `font-variation-settings`. Text is drawn at its reference CSS size under a scaling transform, so Fraunces' automatic optical sizing tracks the print size (≈ `opsz` 9–12 on tiles), matching the reference.
 - **Symbol text:** `<text>` elements inside symbol SVGs (the Chance "?" and the Income Tax "$") are stripped before rasterizing and re-drawn with Canvas text in the self-hosted Fraunces.
 - **Board slab:** the flat top cap is exactly the 1.0 × 1.0 print; the 1.6 mm bevel sits outside it, so decal UVs match the print exactly.
@@ -185,3 +185,35 @@ Where SPEC.md is silent, the decision taken is recorded here (SPEC §0).
   - The lobby still requires two seats that are humans or normal bots.
   - The speed die stays as text in the prompt and log (no 3D die).
 - **Headless runs with humans:** `runHeadless(…, { humansAsBots: true })` lets human seats play the medium strategy, so the human-hotel trigger can be tested unattended. `tests/engine/bankBot.test.ts` runs 30 games per mode, with 0 illegal states.
+
+## Batch 2: owner refinements (2026-11-18)
+
+These change approved SPEC behavior at the owner's request.
+
+- **Camera follows the token (SPEC §10.7 changed):** each turn the camera turns to the side the active player's token stands on (`sideOfTile`: 0–9 bottom, 10–19 left including jail, 20–29 top, 30–39 right). If the move ends on another side, it turns again once the token lands; it doesn't turn mid-move.
+  - The seat's fixed `boardSide` no longer drives the camera; it stays in the state for save compatibility.
+  - Dice are thrown from the side the camera faces.
+  - Rotation off and reduce motion are unchanged.
+- **Bills for every payment (SPEC §10.9 extended):** the engine now emits a payment event for every cash change. That adds purchases, auction wins, building, selling, mortgaging, unmortgaging, GO salary and bankruptcy liquidation. `tests/engine/payments.test.ts` checks conservation across full games.
+  - Big payments keep the full moment.
+  - Every other payment flies banknotes between the player tabs (the bank is the board center) and ticks the counters, with no banner or camera move: 0.7 s at factor 1, or 0.45 s for Manage actions so building several houses doesn't drag.
+  - The counters hold the new balance until the shown state catches up.
+  - Bank-backed bots' payments and bankruptcy hand-overs now show bills too, but never the banner.
+  - Setting "Show bills for every payment" (default on).
+- **SOLD signs:** a small yard sign stands 18 px past each owned tile's inner edge, in the board's center area, so it never covers the color band.
+  - The panel is the owner's color, with a cream "SOLD" sticker on both faces.
+  - Signs turn to face the camera like the tokens.
+  - A sign pops up on purchase, dips and re-colors on a new owner, and sinks when the bank takes the property back.
+  - Three instanced draw calls for all of them.
+  - Far-row houses stay visible above the signs.
+  - The owner disc is kept as a second cue (owner's choice).
+- **Names under the color band:** like the real board, the band is a plain color block and the name prints centered just beneath it (SPEC §10.2 / `reference/board-face.html` changed). The band-text light/dark option still drives the deed cards. Tokens stay where they were (owner's choice), so a token can hide part of a name; the deed panel always shows it.
+- **Card decks on the table:** Chance and Community Chest stacks lie on the printed outlines. Each is a layered card-stock body with the top card's back in the cards.html style; they're purely visual.
+  - The dice physics treats the stacks as obstacles, so dice can bounce off or rest on a stack. The relabel and fairness tests still pass.
+- **Slower speeds:** Relaxed (new, 0.45×), Normal (the old Slow, 0.6×), Fast (the old Normal, 1×), Instant. The old 2× Fast was dropped.
+  - Bot pauses are 1.4 s / 1.1 s / 0.65 s.
+  - The stored keys are unchanged (`slow` = Relaxed).
+- **Fixed along the way (found by the new full-game tests):**
+  - A bank-backed bot froze the game on a speed-die bus or triples choice. It now takes the first bus option, or stays put on triples.
+  - With bank loans on, a normal bot in debt could never declare bankruptcy, because a loan it would never take counted as a way out, so the game froze. Normal bots never borrow (SPEC §3), so their borrowing capacity is now 0.
+- **Performance:** worst-case board 93 draw calls (budget 150). Signs and decks cost about 2 fps on this machine's headless browser.

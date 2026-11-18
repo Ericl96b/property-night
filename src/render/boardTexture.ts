@@ -3,7 +3,7 @@
 // and is scaled to the output size. No paper grain: the face is clean print.
 import * as THREE from 'three';
 import type { BoardData, Tile } from '../data/classicBoard';
-import { BAND_PX, BOARD_PX, CORNER_PX, TILE_H_PX, TILE_W_PX, tileFrame } from './layout';
+import { BAND_PX, BOARD_PX, CORNER_PX, DECK_SPOTS, TILE_H_PX, TILE_W_PX, tileFrame } from './layout';
 import { type CanvasSymbol, type SymbolName, drawCanvasSymbol, loadCanvasSymbol, quoteFamily } from './symbols';
 import { makeCanvas } from './noise';
 
@@ -13,7 +13,6 @@ export const PAPER = '#F3EAD6';
 export const PAPER_HI = '#FBF6EA';
 export const OXBLOOD = '#8E2F23';
 export const FOREST = '#2F5D46';
-const LIGHT_BAND_TEXT = '#FFF8EC';
 const JAIL_ORANGE = '#E3A445';
 const CENTER_TINT = 'rgba(214,226,204,.55)';
 
@@ -150,8 +149,10 @@ function drawTile(ctx: CanvasRenderingContext2D, board: BoardData, t: Tile, syms
     ctx.fillStyle = INK;
     ctx.fillRect(0, BAND_PX - 1, w, 1);
     insetStroke(ctx, 0, 0, w, BAND_PX, 0.6);
-    const b = layoutText(ctx, t.name, { ...NAME, color: g.lightText ? LIGHT_BAND_TEXT : INK }, w - 8);
-    drawBlock(ctx, b, w / 2, (BAND_PX - b.height) / 2);
+    // Owner request (2026-11-18): like the real board, the band is a plain color block and the
+    // name sits in the tile body just beneath it, centered.
+    const b = layoutText(ctx, t.name, NAME, w - 8);
+    drawBlock(ctx, b, w / 2, BAND_PX + 6);
   } else {
     const b = layoutText(ctx, t.name, NAME, w - 8);
     drawBlock(ctx, b, w / 2, 9);
@@ -296,6 +297,7 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.roundRect(x, y, w, h, r);
 }
 
+
 function drawDeck(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -354,8 +356,8 @@ function drawCenter(ctx: CanvasRenderingContext2D, board: BoardData, syms: Symbo
   ctx.lineWidth = 1.4;
   ctx.strokeRect(c - 0.7, c - 0.7, size + 1.4, size + 1.4);
 
-  drawDeck(ctx, c + 46, c + 92, OXBLOOD, syms.chance, 46, 'Chance');
-  drawDeck(ctx, c + 514, c + 532, FOREST, syms.chestDeck, 40, 'Community Chest');
+  drawDeck(ctx, DECK_SPOTS.chance.x, DECK_SPOTS.chance.y, OXBLOOD, syms.chance, 46, 'Chance');
+  drawDeck(ctx, DECK_SPOTS.chest.x, DECK_SPOTS.chest.y, FOREST, syms.chestDeck, 40, 'Community Chest');
 
   const title = layoutText(ctx, board.title, { family: FRAUNCES, weight: 800, size: 64, lineHeight: 1, letterSpacing: -0.5, color: INK });
   const sub = layoutText(ctx, board.subtitle, { family: SANS, weight: 700, size: 12, lineHeight: 1, letterSpacing: 4, color: INK_2, upper: true });

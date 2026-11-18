@@ -49,6 +49,16 @@ This file is the hand-off log for unattended work. A resumed session reads it fi
 
   See DECISIONS.md, "Alpha refinements".
 
+- [x] **Batch 2** (owner requests, 2026-11-18):
+  - camera turns to the active token's side
+  - bills fly for every payment
+  - SOLD signs
+  - names under the color band
+  - card decks on the table
+  - slower speed presets (Relaxed / Normal / Fast / Instant)
+
+  See DECISIONS.md, "Batch 2". Check: `node scripts/cdp.mjs scripts/plans/batch2.mjs .snapshots`.
+
 ## Open questions for the owner
 
 None. The four alpha questions were answered on 2026-11-18. The owner has more fixes and additions planned; they will arrive as a separate batch.

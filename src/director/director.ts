@@ -2,7 +2,7 @@
 // skippable, speed-scaled animations. The engine state is always the source of truth; after
 // every batch the scene is re-synced to it.
 import * as THREE from 'three';
-import { BOARD_TOP, IN_JAIL, SIDE_YAW, tileFrame, tileLocalToWorld } from '../render/layout';
+import { BOARD_TOP, IN_JAIL, SIDE_YAW, sideOfTile, tileFrame, tileLocalToWorld, type Side } from '../render/layout';
 import { placeFlat, simulateThrow } from '../render/diceSim';
 import type { GameScene } from '../render/scene';
 import type { TokenId } from '../render/tokens/tokens';
@@ -31,6 +31,17 @@ export type Moment =
       after: number[];
       duration: number;
     }
+  /** Every other payment (owner request, 2026-11-18): banknotes fly, counters tick, no banner. */
+  | {
+      kind: 'transfer';
+      from: Creditor;
+      to: Creditor;
+      amount: number;
+      reason: string;
+      before: number[];
+      after: number[];
+      duration: number;
+    }
   | { kind: 'banner'; title: string; subtitle?: string; seat: number | null; tone: 'oxblood' | 'forest' | 'brass'; duration: number };
 
 export interface DirectorHooks {
@@ -40,6 +51,10 @@ export interface DirectorHooks {
 }
 
 const PAYMENT_TIME = 2.2;
+/** Small payments; Manage actions (build, sell, mortgage) use the shorter one. */
+const TRANSFER_TIME = 0.7;
+const MANAGE_TRANSFER_TIME = 0.45;
+const MANAGE_REASONS = new Set(['building', 'building sold', 'mortgage', 'unmortgage']);
 const BANNER_TIME = 1.5;
 
 /** What the controller needs from a director (a headless fake implements this in tests). */
@@ -79,6 +94,26 @@ export class Director implements DirectorLike {
 
   private tokenOf(state: State, seat: number): TokenId {
     return state.seats[seat].token as TokenId;
+  }
+
+  /** Where each token stands as the queued animations play (camera turns follow the token). */
+  private positions: number[] = [];
+  /** The side the camera will face once everything queued so far has played. */
+  private plannedSide: Side | null = null;
+
+  /** Turn the camera rig to `side` (skipped when already planned there, unless forced). */
+  private turnTo(side: Side, force = false): void {
+    if (!force && this.plannedSide === side) return;
+    this.plannedSide = side;
+    const sc = this.scene;
+    sc.queue.push({
+      label: 'turn',
+      start: () => {
+        sc.camera.toSide(side, this.speed === Infinity);
+        return () => sc.camera.rotating;
+      },
+      finish: () => sc.camera.toSide(side, true),
+    });
   }
 
   private follow = (token: THREE.Vector3 | null, destination?: THREE.Vector3) => this.scene.camera.setFollow(token, destination);
@@ -124,24 +159,17 @@ export class Director implements DirectorLike {
     for (const e of events) {
       switch (e.type) {
         case 'turnStarted': {
-          const side = state.seats[e.seat].boardSide;
-          q.push({
-            label: 'turn',
-            start: () => {
-              sc.camera.toSide(side, this.speed === Infinity);
-              return () => sc.camera.rotating;
-            },
-            finish: () => sc.camera.toSide(side, true),
-          });
+          // Owner request (2026-11-18): the camera turns to the side the active token is on.
+          this.turnTo(sideOfTile(this.positions[e.seat] ?? state.players[e.seat].position), true);
           break;
         }
         case 'diceRolled': {
-          const sideYaw = SIDE_YAW[state.seats[e.seat].boardSide];
           let th: ReturnType<typeof simulateThrow> | undefined;
           q.push({
             label: 'dice',
             start: () => {
-              const opts = { sideYaw, floorY: BOARD_TOP };
+              // Thrown from the side the camera faces (the active player's view).
+              const opts = { sideYaw: SIDE_YAW[sc.camera.side], floorY: BOARD_TOP };
               th = this.speed === Infinity ? placeFlat(e.dice, this.cosmetic, opts) : simulateThrow(e.dice, this.cosmetic, opts);
               if (this.speed === Infinity) this.sound.dice();
               return sc.dice.play(th, this.speed === Infinity ? 1000 : this.speed, () => this.sound.dice());
@@ -165,11 +193,22 @@ export class Director implements DirectorLike {
             if (!tap) q.push(this.instant('tap', () => this.sound.tap()));
             q.push(sc.tokens.travel(id, path, speed, this.follow, tap));
           }
+          // Landed on another side of the board: the camera turns there once the token lands.
+          this.positions[e.seat] = e.to;
+          this.turnTo(sideOfTile(e.to));
           break;
         }
         case 'propertyTransferred': {
           const color = e.to === null ? null : state.seats[e.to].color;
-          q.push(this.instant('owner', () => sc.decals.setOwner(e.tile, color)));
+          q.push(
+            this.instant('owner', () => {
+              sc.decals.setOwner(e.tile, color);
+              // SOLD sign pops up (re-colors on a new owner, sinks when the bank takes it back).
+              sc.signs.setOwner(e.tile, color, true);
+              if (color && this.speed !== Infinity) this.sound.tock();
+              sc.renderer.requestRender();
+            }),
+          );
           const g = state.board.tiles[e.tile].group;
           if (e.to !== null && g && !setBanners.has(g) && groupTiles(state.board, g).every((i) => state.tiles[i].owner === e.to)) {
             setBanners.add(g);
@@ -229,16 +268,23 @@ export class Director implements DirectorLike {
           break;
         }
         case 'payment': {
-          if (e.reason === 'bankruptcy') break;
-          if (e.amount > 0) q.push(this.instant('coins', () => this.sound.coins(e.amount)));
-          if (typeof e.from === 'number' && state.seats[e.from].kind === 'bankBot') break;
-          const payerBefore = typeof e.from === 'number' ? e.cash[e.from] + e.amount : null;
-          if (!isBigPayment(this.settings(), e.amount, payerBefore)) break;
+          if (e.amount <= 0) break;
+          q.push(this.instant('coins', () => this.sound.coins(e.amount)));
+          const bankBotPays = typeof e.from === 'number' && state.seats[e.from].kind === 'bankBot';
           const before = [...e.cash];
-          if (typeof e.from === 'number') before[e.from] += e.amount;
+          if (typeof e.from === 'number' && !bankBotPays) before[e.from] += e.amount;
           if (typeof e.to === 'number') before[e.to] -= e.amount;
-          const m: Moment = { kind: 'payment', from: e.from, to: e.to, amount: e.amount, reason: e.reason, tile: e.tile, before, after: e.cash, duration: PAYMENT_TIME };
-          q.push(this.momentAnim(m, e.tile));
+          const payerBefore = typeof e.from === 'number' ? e.cash[e.from] + e.amount : null;
+          // Big payments keep the full moment; bank-backed bots' payments and bankruptcy
+          // hand-overs never get the banner.
+          if (!bankBotPays && e.reason !== 'bankruptcy' && isBigPayment(this.settings(), e.amount, payerBefore)) {
+            const m: Moment = { kind: 'payment', from: e.from, to: e.to, amount: e.amount, reason: e.reason, tile: e.tile, before, after: e.cash, duration: PAYMENT_TIME };
+            q.push(this.momentAnim(m, e.tile));
+            break;
+          }
+          if (!this.settings().everyPayment) break;
+          const duration = MANAGE_REASONS.has(e.reason) ? MANAGE_TRANSFER_TIME : TRANSFER_TIME;
+          q.push(this.momentAnim({ kind: 'transfer', from: e.from, to: e.to, amount: e.amount, reason: e.reason, before, after: e.cash, duration }));
           break;
         }
         case 'loanSeized': {
@@ -256,13 +302,20 @@ export class Director implements DirectorLike {
           break;
       }
     }
-    q.push(this.instant('sync', () => this.sync(state)));
+    // After this batch every token stands where the engine says (later batches build on it).
+    this.positions = state.players.map((p) => p.position);
+    q.push(this.instant('sync', () => this.sync(state, true)));
     sc.renderer.requestRender();
   }
 
   /** Make the scene match the engine state exactly (load, skip, end of every batch). */
-  sync(state: State): void {
+  sync(state: State, queued = false): void {
     const sc = this.scene;
+    if (!queued) {
+      // Loaded, resumed or skipped: start tracking from this state.
+      this.positions = state.players.map((p) => p.position);
+      this.plannedSide = null;
+    }
     const live = new Set<string>();
     state.seats.forEach((seat, i) => {
       const p = state.players[i];
@@ -280,6 +333,7 @@ export class Director implements DirectorLike {
     state.tiles.forEach((ts, i) => {
       if (!state.board.tiles[i].price) return;
       sc.decals.setOwner(i, ts.owner === null ? null : state.seats[ts.owner].color);
+      sc.signs.setOwner(i, ts.owner === null ? null : state.seats[ts.owner].color);
       sc.decals.setMortgaged(i, ts.mortgaged);
       sc.decals.setPromise(i, state.promises.some((p) => p.tileId === i));
       sc.decals.setPledged(i, state.players.some((p) => p.loans.some((l) => l.collateral.includes(i))));

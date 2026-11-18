@@ -15,6 +15,7 @@ import type { NewGameConfig, SeatConfig, State } from './engine';
 import { rollDie, seedRng } from './engine/rng';
 import App from './ui/App.svelte';
 import { boardMaxNdcX } from './ui/stage';
+import { sideOfTile } from './render/layout';
 import { openKV } from './storage/db';
 import { RulesPresets } from './app/presets';
 import { BoardPresets, printView } from './app/boardPresets';
@@ -103,7 +104,7 @@ async function boot(): Promise<void> {
     scene.camera.settings.follow = settings.cameraFollow;
     const rm = scene.camera.settings.reduceMotion !== settings.reduceMotion;
     scene.camera.settings.reduceMotion = settings.reduceMotion;
-    if (rm && controller.state) scene.camera.toSide(controller.state.seats[controller.state.turn.seat].boardSide, true);
+    if (rm && controller.state) scene.camera.toSide(sideOfTile(controller.state.players[controller.state.turn.seat].position), true);
     scene.camera.apply();
     scene.renderer.setGraphics({ ao: settings.ambientOcclusion, exposure: settings.brightness, toneMapping: settings.toneMapping });
     scene.renderer.requestRender();
@@ -147,7 +148,7 @@ async function boot(): Promise<void> {
     controller.load(f.snapshot, f.actions, f.seed);
     input.clearBindings();
     f.snapshot.seats.forEach((s, i) => s.controllerId && input.bind(s.controllerId, i));
-    scene.camera.toSide((f.view?.cameraSide ?? f.snapshot.seats[f.snapshot.turn.seat].boardSide) as 0 | 1 | 2 | 3, true);
+    scene.camera.toSide((f.view?.cameraSide ?? sideOfTile(f.snapshot.players[f.snapshot.turn.seat].position)) as 0 | 1 | 2 | 3, true);
     scene.renderer.requestRender();
   };
 
@@ -158,7 +159,7 @@ async function boot(): Promise<void> {
     // Seats are shuffled into turn order: bind each controller to its seat's final index.
     input.clearBindings();
     controller.state.seats.forEach((s, i) => s.controllerId && input.bind(s.controllerId, i));
-    scene.camera.toSide(controller.state.seats[controller.state.turn.seat].boardSide, true);
+    scene.camera.toSide(sideOfTile(controller.state.players[controller.state.turn.seat].position), true);
     scene.renderer.requestRender();
   };
   const toggleFullscreen = () => {
@@ -226,6 +227,7 @@ async function boot(): Promise<void> {
           scene.decals.setPledged(i, false);
           scene.buildings.set(i, 0, false);
         }
+        scene.signs.clear();
         scene.renderer.requestRender();
       },
       onfullscreen: toggleFullscreen,

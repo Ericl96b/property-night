@@ -11,6 +11,7 @@
 import * as CANNON from 'cannon-es';
 import * as THREE from 'three';
 import { Rng } from '../engine/rng';
+import { DECK_STACK, deckFrames } from './layout';
 
 export const DIE_SIZE = 0.055;
 export const STEP = 1 / 120;
@@ -112,6 +113,14 @@ function makeWorld(floorY: number): CANNON.World {
     const b = new CANNON.Body({ mass: 0, material: wallMat, shape: new CANNON.Plane() });
     b.position.set(x, floorY, z);
     b.quaternion.setFromEuler(0, x !== 0 ? ry2 : ry, 0);
+    world.addBody(b);
+  }
+  // The Chance and Community Chest card stacks lie inside the arena: dice bounce off them or
+  // come to rest on top (the shown face is still relabeled to the engine's value).
+  for (const f of deckFrames()) {
+    const b = new CANNON.Body({ mass: 0, material: floorMat, shape: new CANNON.Box(new CANNON.Vec3(DECK_STACK.w / 2, DECK_STACK.h / 2, DECK_STACK.d / 2)) });
+    b.position.set(f.x, floorY + DECK_STACK.h / 2, f.z);
+    b.quaternion.setFromEuler(0, f.yaw, 0);
     world.addBody(b);
   }
   (world as unknown as { dieMat: CANNON.Material }).dieMat = dieMat;

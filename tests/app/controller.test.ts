@@ -3,7 +3,7 @@ import { GameController, type Clock } from '../../src/app/controller';
 import { checkInvariants, type SeatConfig } from '../../src/engine';
 import { chooseMedium } from '../../src/bots';
 
-const BOT_STEP = 700;
+const BOT_STEP = 1150;
 
 /** Deterministic fake clock: timers run in time order when advanced. */
 class FakeClock implements Clock {
@@ -47,7 +47,7 @@ describe('game controller', () => {
     const c = new GameController(null, clock);
     c.start({ seats: seats('bot', 'bot', 'bot'), seed: 12, turnOrder: 'fixed' });
     expect(c.state.turnNumber).toBe(1);
-    clock.advance(649);
+    clock.advance(1099);
     expect(c.state.turn.rolled).toBe(false); // bots wait for their pause
     clock.advance(2);
     expect(c.state.turn.rolled).toBe(true);
@@ -166,7 +166,7 @@ describe('game controller', () => {
     clock.advance(10_000);
     expect(c.state.turn.rolled).toBe(false);
     c.setPaused(false);
-    clock.advance(700);
+    clock.advance(1150);
     expect(c.state.turn.rolled).toBe(true);
   });
 });

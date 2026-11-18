@@ -47,6 +47,15 @@ const tileName = (c: Ctx, tile: number) => c.s.board.tiles[tile].name;
 
 // ---- money ---------------------------------------------------------------------------------
 
+/**
+ * Every cash change emits a payment event (owner request, 2026-11-18: banknotes fly for every
+ * transaction). Call after the cash has moved so the snapshot shows the new balances.
+ */
+function paid(c: Ctx, from: Creditor, to: Creditor, amount: number, reason: string, tile?: number): void {
+  if (amount <= 0) return;
+  c.ev.push({ type: 'payment', cash: cashSnap(c), from, to, amount, reason, tile });
+}
+
 function credit(c: Ctx, seat: number, amount: number): void {
   if (isBankBot(c.s, seat)) return; // bank-backed bots collect nothing
   c.s.players[seat].cash += amount;
@@ -123,6 +132,7 @@ function moveForward(c: Ctx, seat: number, steps: number, direct: boolean): numb
   if (from + steps >= 40 && !isBankBot(c.s, seat)) {
     const amount = salaryFor(c, to === 0);
     credit(c, seat, amount);
+    paid(c, 'bank', seat, amount, 'GO salary', 0);
     c.ev.push({ type: 'passedGo', seat, amount });
     log(c, seat, `${name(c, seat)} collected $${amount} at GO`);
     repayAtGo(c, seat);
@@ -336,6 +346,7 @@ function endAuction(c: Ctx): void {
   if (a.highBidder !== null) {
     const w = a.highBidder;
     s.players[w].cash -= a.highBid;
+    paid(c, w, 'bank', a.highBid, 'auction', a.tile);
     s.tiles[a.tile].owner = w;
     s.players[w].stats.auctionBuys++;
     c.ev.push({ type: 'propertyTransferred', tile: a.tile, from: null, to: w });
@@ -546,20 +557,25 @@ function bankrupt(c: Ctx, seat: number, creditor: Creditor): void {
   const s = c.s;
   const p = s.players[seat];
   // Buildings go back to the bank at the sell-back value.
+  let liquidated = 0;
   for (const t of s.board.tiles) {
     const ts = s.tiles[t.index];
     if (ts.owner !== seat || ts.buildings === 0) continue;
+    liquidated += ts.buildings * buildingSellValue(s, t.index);
     p.cash += ts.buildings * buildingSellValue(s, t.index);
     if (ts.buildings === 5) s.bank.hotels++;
     else s.bank.houses += ts.buildings;
     ts.buildings = 0;
   }
+  paid(c, 'bank', seat, liquidated, 'buildings sold');
   const owned = s.board.tiles.filter((t) => s.tiles[t.index].owner === seat).map((t) => t.index);
   const toPlayer = typeof creditor === 'number' && !s.players[creditor].bankrupt;
   if (toPlayer) {
     const cr = creditor as number;
-    credit(c, cr, p.cash);
-    if (p.cash > 0) c.ev.push({ type: 'payment', cash: cashSnap(c), from: seat, to: cr, amount: p.cash, reason: 'bankruptcy' });
+    const estate = p.cash;
+    p.cash = 0;
+    credit(c, cr, estate);
+    paid(c, seat, cr, estate, 'bankruptcy');
     const mortgaged: number[] = [];
     for (const i of owned) {
       s.tiles[i].owner = cr;
@@ -569,6 +585,9 @@ function bankrupt(c: Ctx, seat: number, creditor: Creditor): void {
     if (mortgaged.length && s.rules.receiveMortgaged === 'interest') s.transfers.push({ to: cr, tiles: mortgaged });
     s.players[cr].gojf.push(...p.gojf);
   } else {
+    const estate = p.cash;
+    p.cash = 0;
+    paid(c, seat, 'bank', estate, 'bankruptcy');
     for (const i of owned) {
       s.tiles[i].owner = null;
       s.tiles[i].mortgaged = false;
@@ -885,6 +904,7 @@ export function apply(state: State, action: Action): ApplyResult {
       const price = s.board.tiles[tile].price ?? 0;
       if (s.players[seat].cash < price) fail('not enough cash');
       s.players[seat].cash -= price;
+      paid(c, seat, 'bank', price, 'purchase', tile);
       s.tiles[tile].owner = seat;
       s.players[seat].stats.directBuys++;
       s.pendingBuy = null;
@@ -937,6 +957,7 @@ export function apply(state: State, action: Action): ApplyResult {
       if (why) fail(why);
       if (maybeShortageAuction(c, seat, action.tile)) break;
       s.players[seat].cash -= s.board.tiles[action.tile].houseCost ?? 0;
+      paid(c, seat, 'bank', s.board.tiles[action.tile].houseCost ?? 0, 'building', action.tile);
       placeBuilding(c, seat, action.tile);
       break;
     }
@@ -945,6 +966,7 @@ export function apply(state: State, action: Action): ApplyResult {
       if (why) fail(why);
       const ts = s.tiles[action.tile];
       const value = buildingSellValue(s, action.tile);
+      const cashBefore = s.players[seat].cash;
       if (ts.buildings === 5 && s.bank.houses >= 4) {
         // Breaking a hotel takes 4 houses from the bank.
         s.bank.hotels++;
@@ -967,6 +989,7 @@ export function apply(state: State, action: Action): ApplyResult {
         s.players[seat].cash += value;
         ts.buildings--;
       }
+      paid(c, 'bank', seat, s.players[seat].cash - cashBefore, 'building sold', action.tile);
       c.ev.push({ type: 'sold', seat, tile: action.tile, buildings: ts.buildings });
       log(c, seat, `${name(c, seat)} sold a building on ${tileName(c, action.tile)}`);
       break;
@@ -976,6 +999,7 @@ export function apply(state: State, action: Action): ApplyResult {
       if (why) fail(why);
       s.tiles[action.tile].mortgaged = true;
       s.players[seat].cash += mortgageValue(s, action.tile);
+      paid(c, 'bank', seat, mortgageValue(s, action.tile), 'mortgage', action.tile);
       c.ev.push({ type: 'mortgaged', seat, tile: action.tile });
       log(c, seat, `${name(c, seat)} mortgaged ${tileName(c, action.tile)}`);
       break;
@@ -983,7 +1007,9 @@ export function apply(state: State, action: Action): ApplyResult {
     case 'unmortgage': {
       const why = unmortgageBlocker(s, seat, action.tile);
       if (why) fail(why);
-      s.players[seat].cash -= unmortgageCost(s, action.tile);
+      const lift = unmortgageCost(s, action.tile);
+      s.players[seat].cash -= lift;
+      paid(c, seat, 'bank', lift, 'unmortgage', action.tile);
       s.tiles[action.tile].mortgaged = false;
       c.ev.push({ type: 'unmortgaged', seat, tile: action.tile });
       log(c, seat, `${name(c, seat)} lifted the mortgage on ${tileName(c, action.tile)}`);
@@ -997,6 +1023,7 @@ export function apply(state: State, action: Action): ApplyResult {
         const cost = unmortgageCost(s, action.tile);
         if (s.players[seat].cash < cost) fail('not enough cash');
         s.players[seat].cash -= cost;
+        paid(c, seat, 'bank', cost, 'unmortgage', action.tile);
         s.tiles[action.tile].mortgaged = false;
         c.ev.push({ type: 'unmortgaged', seat, tile: action.tile });
         log(c, seat, `${name(c, seat)} lifted the mortgage on ${tileName(c, action.tile)}`);

@@ -21,6 +21,8 @@ export interface Settings {
   /** Exposure multiplier, 0.7–1.3. */
   brightness: number;
   toneMapping: ToneMappingSetting;
+  /** Banknotes fly between the player tabs for every payment, not only big ones. */
+  everyPayment: boolean;
 }
 
 export type ToneMappingSetting = 'aces' | 'agx' | 'neutral';
@@ -41,6 +43,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ambientOcclusion: false,
   brightness: 1,
   toneMapping: 'aces',
+  everyPayment: true,
 };
 
 const KEY = 'property-night.settings.v1';

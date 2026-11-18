@@ -54,7 +54,7 @@ const realClock: Clock = {
   clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
 };
 
-const BOT_PAUSE: Record<Speed, number> = { slow: 1100, normal: 650, fast: 300, instant: 0 };
+const BOT_PAUSE: Record<Speed, number> = { slow: 1400, normal: 1100, fast: 650, instant: 0 };
 
 type Listener = (v: GameView) => void;
 

@@ -113,7 +113,9 @@ export function seizureValue(s: State, tile: number): number {
 /** Extra cash a player could still borrow (for the "can anything cover the debt?" check). */
 export function borrowCapacity(s: State, seat: number): number {
   const r = s.rules;
-  if (!r.loans || isBankBot(s, seat) || s.players[seat].loans.length >= r.maxActiveLoans) return 0;
+  // Normal bots never borrow (SPEC §3), so a loan they would never take cannot keep them from
+  // declaring bankruptcy (games with loans on and a bot in debt used to stall).
+  if (!r.loans || isBankBot(s, seat) || s.seats[seat].kind === 'bot' || s.players[seat].loans.length >= r.maxActiveLoans) return 0;
   // Beyond what mortgaging would raise: pledging free tiles may lend more than their mortgage value.
   const free = s.board.tiles.filter((t) => !pledgeBlocker(s, seat, t.index)).map((t) => t.index);
   const mortgageSum = free.reduce((n, t) => n + mortgageValue(s, t), 0);

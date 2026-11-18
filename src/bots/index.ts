@@ -13,6 +13,14 @@ export function chooseBankBot(s: State, seat: number): Action | null {
   const broke = acts.find((a) => a.type === 'declareBankruptcy');
   if (broke) return broke;
   if (s.turn.seat !== seat) return null;
+  // Speed die: it has no preference, so it takes the first offered move (bus) or stays put
+  // (triples: "move to any space" — its own tile). Without this a game with the speed die and
+  // a bank-backed bot stalled.
+  if (s.phase === 'speedChoice') {
+    const sc = s.turn.speedChoice!;
+    if (sc.anyTile) return { type: 'speedChoice', seat, target: s.players[seat].position };
+    return acts.find((a) => a.type === 'speedChoice') ?? null;
+  }
   return acts.find((a) => a.type === 'roll') ?? acts.find((a) => a.type === 'endTurn') ?? null;
 }
 

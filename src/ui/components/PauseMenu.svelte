@@ -67,7 +67,7 @@
       <div class="col settings">
         <label>Speed
           <select value={settings.speed} onchange={(e) => onsetting({ speed: (e.currentTarget as HTMLSelectElement).value as Settings['speed'] })}>
-            <option value="slow">Slow</option><option value="normal">Normal</option><option value="fast">Fast</option><option value="instant">Instant</option>
+            <option value="slow">Relaxed</option><option value="normal">Normal</option><option value="fast">Fast</option><option value="instant">Instant</option>
           </select>
         </label>
         <label>Quality
@@ -101,6 +101,7 @@
         <label class="chk"><input type="checkbox" checked={settings.cameraFollow} onchange={(e) => onsetting({ cameraFollow: (e.currentTarget as HTMLInputElement).checked })} /> Camera follow</label>
         <label class="chk"><input type="checkbox" checked={settings.undo} onchange={(e) => onsetting({ undo: (e.currentTarget as HTMLInputElement).checked })} /> Undo last decision</label>
         <label class="chk"><input type="checkbox" checked={settings.swapNintendo} onchange={(e) => onsetting({ swapNintendo: (e.currentTarget as HTMLInputElement).checked })} /> Swap Confirm/Back on Nintendo pads</label>
+        <label class="chk"><input type="checkbox" checked={settings.everyPayment} onchange={(e) => onsetting({ everyPayment: (e.currentTarget as HTMLInputElement).checked })} /> Show bills for every payment</label>
         <label class="chk"><input type="checkbox" checked={settings.reduceMotion} onchange={(e) => onsetting({ reduceMotion: (e.currentTarget as HTMLInputElement).checked })} /> Reduce motion</label>
         <label>Big payment from $
           <input type="number" min="0" step="50" value={settings.bigPaymentAmount} onchange={(e) => onsetting({ bigPaymentAmount: Math.max(0, Number((e.currentTarget as HTMLInputElement).value) || 0) })} />

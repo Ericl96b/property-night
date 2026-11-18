@@ -9,6 +9,7 @@
   import { glyphFamily, type InputManager, type PadInfo } from '../input/manager';
   import { moveFocus, type Dir } from './focus';
   import { stageFit } from './stage';
+  import { SPEED_FACTOR } from '../director/queue';
   import LogPanel from './components/LogPanel.svelte';
   import StatsPanel from './components/StatsPanel.svelte';
   import TradePanel from './components/TradePanel.svelte';
@@ -101,8 +102,10 @@
       started = !!v.state;
       if (v.moment !== lastMoment) {
         lastMoment = v.moment;
-        if (v.moment?.kind === 'payment') tickCash(v.moment.before, v.moment.after, v.moment.duration, typeof v.moment.from === 'number' ? v.moment.from : null);
+        if (v.moment?.kind === 'payment' || v.moment?.kind === 'transfer') tickCash(v.moment.before, v.moment.after, v.moment.duration, typeof v.moment.from === 'number' ? v.moment.from : null);
       }
+      // Counters hold the last payment's balances until the shown state catches up.
+      if (v.state !== heldState && !ticking) cashOverride = null;
     });
     const fit = () => {
       const f = stageFit(window.innerWidth, window.innerHeight);
@@ -118,18 +121,28 @@
   });
 
   /** Counters tick from before to after during the middle of the payment moment. */
+  let heldState: unknown = null;
+  let ticking = false;
+  let tickId = 0;
   function tickCash(before: number[], after: number[], duration: number, payer: number | null) {
-    const k = controller.speed === 'instant' ? 1000 : { slow: 0.6, normal: 1, fast: 2 }[controller.speed];
+    const k = controller.speed === 'instant' ? 1000 : SPEED_FACTOR[controller.speed];
     const total = (duration / k) * 1000;
     const t0 = performance.now();
+    const id = ++tickId;
+    ticking = true;
+    heldState = view?.state ?? null;
     const step = () => {
+      if (id !== tickId) return; // a newer payment took over
       const t = (performance.now() - t0) / total;
       const u = Math.min(1, Math.max(0, (t - 0.35) / 0.55));
       const e = 1 - (1 - u) ** 3;
       cashOverride = before.map((b, i) => Math.round(b + (after[i] - b) * e));
       if (t < 1) requestAnimationFrame(step);
       else {
-        cashOverride = null;
+        ticking = false;
+        // Hold the new balances; they clear once the shown state catches up.
+        cashOverride = [...after];
+        heldState = view?.state ?? null;
         if (payer !== null && after[payer] < 100) {
           shake = payer;
           setTimeout(() => (shake = null), 500);
@@ -455,7 +468,7 @@
     {/if}
     {#if view.moment}
       {#key view.moment}
-        <MomentLayer moment={view.moment} {gs} speed={controller.speed === 'instant' ? Infinity : { slow: 0.6, normal: 1, fast: 2 }[controller.speed]} />
+        <MomentLayer moment={view.moment} {gs} speed={SPEED_FACTOR[controller.speed]} />
       {/key}
     {/if}
     {#if gs.phase === 'gameOver'}
