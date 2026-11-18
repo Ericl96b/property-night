@@ -13,7 +13,7 @@ Give this file to a new Claude Code session opened in `C:\Users\Ericl_9vgzjbj\Pr
 ## Read these first
 
 1. `SPEC.md` — the build spec. §14 is the milestone order, §15 the acceptance checks.
-2. `docs/PROGRESS.md` — milestone checklist, owner instructions, definition of done, open questions. **Remove its "STATUS: WAITING FOR THE OWNER" section once the owner says to continue**; that section is what keeps the scheduled task idle.
+2. `docs/PROGRESS.md` — milestone checklist, owner instructions, definition of done, open questions. **Remove its "STATUS: WAITING FOR THE OWNER" section once the owner says to continue.**
 3. `DECISIONS.md` — every judgement call made where the SPEC is silent or self-contradictory (per milestone). Keep appending to it.
 4. `README.md` — scripts, controls, layout, review URL parameters.
 
@@ -82,5 +82,5 @@ Much is already in place: the setup screen offers Human / Bot / Bank-backed bot 
 
 ## Housekeeping
 
-- A scheduled task **`property-night-resume`** (Claude app → Scheduled, every 2 hours, saved in Auto mode) resumes unattended work from `docs/PROGRESS.md`. It does nothing while `.snapshots/heartbeat` is < 45 minutes old or while `docs/PROGRESS.md` says the build is waiting for the owner. Delete or disable it if a manual session takes over.
+- The scheduled auto-resume task (`property-night-resume`) was deleted by the owner on 2026-11-17; nothing resumes the build automatically. `.snapshots/heartbeat` is only a leftover from that setup and can be ignored.
 - Local preview of the production build: `vite preview` 404s on module scripts in this Vite version (a dev-server quirk tied to `Sec-Fetch-Dest`); verify production on the live Pages URL instead.

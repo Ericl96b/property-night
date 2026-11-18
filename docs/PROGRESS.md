@@ -4,7 +4,7 @@ This file is the hand-off log for unattended work. A resumed session reads it fi
 
 ## STATUS: WAITING FOR THE OWNER (2026-11-17)
 
-The owner asked to stop after M9 and resume from a new Claude Code session using `docs/HANDOFF.md`. **Unattended sessions (including the scheduled `property-night-resume` task) must do nothing** until the owner removes this section.
+The owner asked to stop after M9 and resume from a new Claude Code session using `docs/HANDOFF.md`. **Unattended sessions must do nothing** until the owner removes this section. (The scheduled auto-resume task was deleted on 2026-11-17.)
 
 ## Owner instructions (2026-11-17)
 
@@ -39,7 +39,7 @@ The owner asked to stop after M9 and resume from a new Claude Code session using
 
 - Engine: `src/engine/` (pure reducer `apply`, `legalActions`, invariants). Bots: `src/bots/`. Headless runner: `src/bots/headless.ts`; acceptance run: `npm run sim -- 10000`.
 - Trades and rent-free promises are implemented in the engine (pulled forward from M5 because bot games cannot finish without trading).
-- Heartbeat: `.snapshots/heartbeat` holds the time of the last progress step. A resumed session must not start work if it is less than 45 minutes old (another session is still working).
+- The scheduled auto-resume task and its heartbeat check were retired on 2026-11-17 (task deleted by the owner).
 
 ## Open questions for the owner
 
