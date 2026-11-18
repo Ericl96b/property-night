@@ -31,7 +31,7 @@ This file is the hand-off log for unattended work. A resumed session reads it fi
 - [x] **M8** Board and card editors + board presets (texture regeneration). Done 2026-11-17.
 - [x] **M9** Save slots, autosave, resume, export/import, undo, game log. Done 2026-11-17.
 - [x] **M10** Bots (medium + bank-backed) in the lobby. Done 2026-11-17: turn order Random / As listed with reordering, bot badges and descriptions, a log line for every action, game-over wording for the §3 win rules; mixed human/bot/bank-bot controller test.
-- [ ] **M11** Polish: sounds, stats screen, speed settings, reduce motion, performance pass.
+- [x] **M11** Polish: sounds, stats screen, speed settings, reduce motion, performance pass. Done 2026-11-17: WebAudio sound and music with volumes, end-of-game stats screen, speed/reduce-motion audit, performance pass (71 draw calls worst case, render on demand), installable offline PWA; §15 summary in `docs/m11/acceptance.md`. Real-hardware checks (controllers, 4K/laptop fps) remain for the owner.
 
 ## Notes for the next session
 

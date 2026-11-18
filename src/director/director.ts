@@ -10,6 +10,7 @@ import { Rng } from '../engine/rng';
 import { groupTiles, type Creditor, type GameEvent, type State } from '../engine';
 import { DEFAULT_SETTINGS, isBigPayment, type Settings } from '../app/settings';
 import type { Animation } from './queue';
+import { SILENT, type SoundFx } from '../audio/sound';
 
 export interface CardView {
   deck: 'chance' | 'chest';
@@ -56,6 +57,8 @@ export class Director implements DirectorLike {
 
   /** Live settings (payment thresholds). */
   settings: () => Settings = () => DEFAULT_SETTINGS;
+  /** Sound effects (SPEC §9); silent in tests and until audio is unlocked. */
+  sound: SoundFx = SILENT;
 
   constructor(
     private scene: GameScene,
@@ -93,6 +96,7 @@ export class Director implements DirectorLike {
     return {
       label: `moment ${m.kind}`,
       start: () => {
+        if (m.kind === 'banner') this.sound.sting(m.tone === 'oxblood' ? 'bad' : 'good');
         this.hooks.moment(m);
         if (tile !== undefined) {
           const [x, z] = tileLocalToWorld(tileFrame(tile), 0, 0);
@@ -139,7 +143,8 @@ export class Director implements DirectorLike {
             start: () => {
               const opts = { sideYaw, floorY: BOARD_TOP };
               th = this.speed === Infinity ? placeFlat(e.dice, this.cosmetic, opts) : simulateThrow(e.dice, this.cosmetic, opts);
-              return sc.dice.play(th, this.speed === Infinity ? 1000 : this.speed);
+              if (this.speed === Infinity) this.sound.dice();
+              return sc.dice.play(th, this.speed === Infinity ? 1000 : this.speed, () => this.sound.dice());
             },
             finish: () => th && sc.dice.pose(th, Infinity),
           });
@@ -155,7 +160,10 @@ export class Director implements DirectorLike {
             const n = Math.abs(e.steps);
             const dir = Math.sign(e.steps);
             const path = Array.from({ length: n }, (_, k) => (((e.from + dir * (k + 1)) % 40) + 40) % 40);
-            q.push(sc.tokens.travel(id, path, speed, this.follow));
+            // Instant speed: one tap on arrival instead of a tap per tile.
+            const tap = this.speed === Infinity ? undefined : () => this.sound.tap();
+            if (!tap) q.push(this.instant('tap', () => this.sound.tap()));
+            q.push(sc.tokens.travel(id, path, speed, this.follow, tap));
           }
           break;
         }
@@ -175,11 +183,11 @@ export class Director implements DirectorLike {
           q.push(this.instant('mortgage', () => sc.decals.setMortgaged(e.tile, e.type === 'mortgaged')));
           break;
         case 'built': {
-          q.push({ label: 'build', start: () => sc.buildings.add(e.tile, this.speed === Infinity ? 0 : 1 / this.speed) });
+          q.push({ label: 'build', start: () => (this.sound.tock(), sc.buildings.add(e.tile, this.speed === Infinity ? 0 : 1 / this.speed)) });
           break;
         }
         case 'sold': {
-          q.push({ label: 'sell', start: () => sc.buildings.remove(e.tile, this.speed === Infinity ? 0 : 1 / this.speed) });
+          q.push({ label: 'sell', start: () => (this.sound.tock(true), sc.buildings.remove(e.tile, this.speed === Infinity ? 0 : 1 / this.speed)) });
           break;
         }
         case 'cardDrawn': {
@@ -187,6 +195,7 @@ export class Director implements DirectorLike {
           q.push({
             label: 'card',
             start: () => {
+              this.sound.card();
               this.hooks.card(card);
               let t = 0;
               return (dt) => {
@@ -208,6 +217,7 @@ export class Director implements DirectorLike {
         }
         case 'payment': {
           if (e.reason === 'bankruptcy') break;
+          if (e.amount > 0) q.push(this.instant('coins', () => this.sound.coins(e.amount)));
           if (typeof e.from === 'number' && state.seats[e.from].kind === 'bankBot') break;
           const payerBefore = typeof e.from === 'number' ? e.cash[e.from] + e.amount : null;
           if (!isBigPayment(this.settings(), e.amount, payerBefore)) break;

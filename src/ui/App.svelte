@@ -9,6 +9,7 @@
   import { glyphFamily, type InputManager, type PadInfo } from '../input/manager';
   import { moveFocus, type Dir } from './focus';
   import LogPanel from './components/LogPanel.svelte';
+  import StatsPanel from './components/StatsPanel.svelte';
   import TradePanel from './components/TradePanel.svelte';
   import LoanPanel from './components/LoanPanel.svelte';
   import MainMenu from './components/MainMenu.svelte';
@@ -75,6 +76,12 @@
   let lastMoment: unknown = null;
   let pads = $state<PadInfo[]>([]);
   let logOpen = $state(false);
+  let statsOpen = $state(false);
+  function toMenu() {
+    statsOpen = false;
+    screen = 'menu';
+    onnewgame();
+  }
   let waitingSeat = $state<number | null>(null);
   let navFocus = false;
   let loanSeat = $state<number | null>(null);
@@ -194,7 +201,7 @@
     return amt <= gs!.players[seat].cash ? amt : null;
   }
 
-  const PANELS = ['.remap', '.savep', '.pause', '.padlost', '.logp', '.loans', '.trade', '.manage', '.auction', '.setup', '.context', '.banner'];
+  const PANELS = ['.remap', '.savep', '.pause', '.padlost', '.statsp', '.logp', '.loans', '.trade', '.manage', '.auction', '.setup', '.context', '.banner'];
   function topPanel(): Element | null {
     const stage = document.querySelector('.stage');
     if (!stage) return null;
@@ -272,6 +279,12 @@
       if (i === 'back') logOpen = false;
       return true;
     }
+    if (statsOpen) {
+      if (navigate(i)) return true;
+      if (i === 'confirm' && !clickFocused()) toMenu();
+      if (i === 'back' || i === 'manage') statsOpen = false;
+      return true;
+    }
     if (view.busy || view.card || view.moment) {
       if (i === 'confirm' || i === 'back') {
         controller.skip();
@@ -335,15 +348,16 @@
       return true;
     }
     const seatActions = controller.actionsFor(seat);
+    if (gs.phase === 'gameOver' && i === 'manage') {
+      statsOpen = true;
+      return true;
+    }
     if (i === 'manage') {
       if (seatActions.some((a) => ['build', 'sell', 'mortgage', 'unmortgage'].includes(a.type)) && gs.phase !== 'debt') manageSeat = seat;
       return true;
     }
     if (gs.phase === 'gameOver') {
-      if (i === 'confirm') {
-        screen = 'menu';
-        onnewgame();
-      }
+      if (i === 'confirm') toMenu();
       return true;
     }
     const buttons = primaryButtons(gs, seatActions);
@@ -450,9 +464,15 @@
           <div class="eyebrow">Game over</div>
           <div class="big">{gameOverText(gs).title}</div>
           <div class="sub">{gameOverText(gs).subtitle}</div>
-          <div class="again"><ActionButton label="Main menu" glyph="confirm" primary onclick={() => { screen = 'menu'; onnewgame(); }} /></div>
+          <div class="again">
+            <ActionButton label="Main menu" glyph="confirm" primary onclick={toMenu} />
+            <ActionButton label="Game stats" glyph="manage" onclick={() => (statsOpen = true)} />
+          </div>
         </div>
       </div>
+      {#if statsOpen}
+        <StatsPanel {gs} onclose={() => (statsOpen = false)} onmenu={toMenu} />
+      {/if}
     {/if}
     <button class="menu" aria-label="Pause menu" onclick={() => setPaused(true)}><img src={symbolUrl('ui-menu')} alt="" /></button>
     {#if paused}
@@ -509,6 +529,9 @@
     color: var(--ink-2);
   }
   .again {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     margin-top: 22px;
     width: 360px;
     margin-inline: auto;

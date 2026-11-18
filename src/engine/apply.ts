@@ -23,6 +23,7 @@ import {
 import { cloneState } from './state';
 import { validateOffer } from './trade';
 import { borrowCapacity, installment, loanBlocker, seizureValue } from './loans';
+import { HISTORY_MAX } from './state';
 import { EngineError, SPEED_BUS, SPEED_MR, type Action, type ApplyResult, type Creditor, type GameEvent, type State, type TradeOffer } from './types';
 
 interface Ctx {
@@ -57,10 +58,33 @@ function addDebt(c: Ctx, from: number, to: Creditor, amount: number, reason: str
   if (isBankBot(c.s, from)) {
     // Unlimited money: the bank pays on the bank-backed bot's behalf.
     if (typeof to === 'number') credit(c, to, amount);
+    if (opts.rent && typeof to === 'number') countRent(c, null, to, amount, opts.tile);
     c.ev.push({ type: 'payment', cash: cashSnap(c), from, to, amount, reason, tile: opts.tile });
     return;
   }
   c.s.debts.push({ from, to, amount, reason, ...opts });
+}
+
+/** Rent stats: per player (paid / received) and per tile (most profitable tile). */
+function countRent(c: Ctx, from: number | null, to: number, amount: number, tile?: number): void {
+  if (from !== null) c.s.players[from].stats.rentPaid += amount;
+  c.s.players[to].stats.rentReceived += amount;
+  if (tile !== undefined && c.s.history.tileRent[tile] !== undefined) c.s.history.tileRent[tile] += amount;
+}
+
+/** Money over time: one sample every `every` turns, thinned 2:1 when the series is full. */
+function recordCash(c: Ctx, force = false): void {
+  const h = c.s.history;
+  const turn = c.s.turnNumber;
+  const last = h.cash[h.cash.length - 1];
+  if (!force && last && turn - last.turn < h.every) return;
+  const sample = { turn, cash: c.s.players.map((p) => (p.bankrupt ? 0 : p.cash)) };
+  if (last && last.turn === turn) h.cash[h.cash.length - 1] = sample;
+  else h.cash.push(sample);
+  if (h.cash.length > HISTORY_MAX) {
+    h.cash = h.cash.filter((_, i) => i % 2 === 0 || i === h.cash.length - 1);
+    h.every *= 2;
+  }
 }
 
 function settle(c: Ctx, i: number): void {
@@ -71,10 +95,7 @@ function settle(c: Ctx, i: number): void {
     if (d.pot && (c.s.rules.freeParking === 'pot' || c.s.rules.freeParking === 'potSeed')) c.s.freeParkingPot += d.amount;
   } else {
     credit(c, d.to, d.amount);
-    if (d.rent) {
-      p.stats.rentPaid += d.amount;
-      c.s.players[d.to].stats.rentReceived += d.amount;
-    }
+    if (d.rent) countRent(c, d.from, d.to, d.amount, d.tile);
   }
   c.ev.push({ type: 'payment', cash: cashSnap(c), from: d.from, to: d.to, amount: d.amount, reason: d.reason, tile: d.tile });
   log(c, d.from, `${name(c, d.from)} paid $${d.amount} ${d.to === 'bank' ? 'to the bank' : `to ${name(c, d.to)}`} (${d.reason})`);
@@ -338,6 +359,7 @@ function repayAtGo(c: Ctx, seat: number): void {
     const due = installment(loan);
     if (p.cash >= due.total) {
       p.cash -= due.total;
+      p.stats.loanInterest += due.interest;
       loan.principal -= due.principal;
       loan.passesLeft -= 1;
       const closed = loan.principal <= 0;
@@ -373,6 +395,7 @@ function repayAtGo(c: Ctx, seat: number): void {
       // Unsecured: the installment is owed to the bank like unpaid rent.
       loan.principal -= due.principal;
       loan.passesLeft -= 1;
+      p.stats.loanInterest += due.interest;
       if (loan.principal > 0) p.loans.push(loan);
       addDebt(c, seat, 'bank', due.total, 'loan installment');
       log(c, seat, `${name(c, seat)} cannot cover a $${due.total} loan installment`);
@@ -572,6 +595,7 @@ function checkWin(c: Ctx): boolean {
   s.winner = winner;
   s.auction = null;
   s.debts = [];
+  recordCash(c, true);
   c.ev.push({ type: 'gameOver', winner });
   const lost = humans.length === 1 && aliveHumans.length === 0 ? humans[0] : null;
   log(c, winner, winner !== null ? `${name(c, winner)} wins!` : lost !== null ? `Game over: ${name(c, lost)} is out` : 'Game over');
@@ -636,6 +660,7 @@ function nextTurn(c: Ctx): void {
   s.turn = { seat: next, doubles: 0, rolled: false, extraRoll: false, dice: null, trades: 0, speed: null, speedChoice: null, mrMonopoly: false };
   s.turnNumber++;
   s.phase = 'preRoll';
+  recordCash(c);
   c.ev.push({ type: 'turnStarted', seat: next });
 }
 
@@ -975,6 +1000,8 @@ export function apply(state: State, action: Action): ApplyResult {
       const loan = { id: s.nextLoanId++, principal: action.amount, rate: s.rules.loanInterestPercent, passesLeft: action.passes, collateral: [...action.collateral], secured: action.collateral.length > 0 };
       s.players[seat].loans.push(loan);
       s.players[seat].cash += action.amount;
+      s.players[seat].stats.loansTaken++;
+      s.players[seat].stats.borrowed += action.amount;
       c.ev.push({ type: 'loanTaken', seat, loan: { ...loan, collateral: [...loan.collateral] } });
       c.ev.push({ type: 'payment', cash: cashSnap(c), from: 'bank', to: seat, amount: action.amount, reason: 'bank loan' });
       log(c, seat, `${name(c, seat)} borrowed $${action.amount} over ${action.passes} GO passes${loan.secured ? ' (secured)' : ''}`);

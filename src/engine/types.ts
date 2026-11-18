@@ -42,8 +42,28 @@ export interface PlayerState {
   /** Has passed GO at least once (the speed die joins after the first lap). */
   lapped: boolean;
   loans: Loan[];
-  /** Stats for the end-of-game screen (M11). */
-  stats: { rentPaid: number; rentReceived: number; auctionBuys: number; directBuys: number };
+  /** Stats for the end-of-game screen (SPEC §9). */
+  stats: PlayerStats;
+}
+
+export interface PlayerStats {
+  rentPaid: number;
+  rentReceived: number;
+  auctionBuys: number;
+  directBuys: number;
+  loansTaken: number;
+  borrowed: number;
+  loanInterest: number;
+}
+
+/** Game-wide stats for the end-of-game screen: money over time and rent per tile. */
+export interface GameHistory {
+  /** Cash per seat, sampled at turn starts (thinned to stay small) plus the final position. */
+  cash: { turn: number; cash: number[] }[];
+  /** Sample every N turns (doubles each time the series is thinned). */
+  every: number;
+  /** Rent collected on each tile over the whole game. */
+  tileRent: number[];
 }
 
 export interface TileState {
@@ -177,6 +197,8 @@ export interface State {
   winner: number | null;
   log: LogEntry[];
   rng: RngState;
+  /** Stats history (absent in saves from before M11; filled in on load). */
+  history: GameHistory;
 }
 
 // ---- actions ------------------------------------------------------------------------------

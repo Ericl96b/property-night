@@ -90,6 +90,12 @@ await sleep(plan.loadWait ?? 3000);
 let failed = false;
 for (const step of plan.steps) {
   if (step.wait) await sleep(step.wait);
+  if (step.cdp) {
+    // Raw protocol command, e.g. { cdp: 'Network.emulateNetworkConditions', params: {...} }.
+    const r = await send(step.cdp, step.params ?? {});
+    console.log(`cdp ${step.cdp}: ${r.error ? `error ${r.error.message}` : 'ok'}`);
+    if (r.error) failed = true;
+  }
   if (step.eval) {
     const v = await evaluate(step.eval);
     console.log(`eval ${step.label ?? ''}: ${JSON.stringify(v)}`);

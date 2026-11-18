@@ -6,7 +6,7 @@ A couch-play property-trading board game for one Windows PC on a 4K TV: two play
 
 ## Status
 
-Playable: set up 2–6 seats (human, bot or bank-backed bot), then roll, move, buy, pay rent, draw cards, go to jail and end turns, with the director animating every engine event. See [docs/PROGRESS.md](docs/PROGRESS.md) for milestone status.
+Complete (milestones M0–M11): 2–6 seats (human, medium bot or bank-backed bot) with random or listed turn order; the full Classic rules plus every §5/§7 setting, auctions, trades with promises, bank loans, rules/board/card editors and presets; saves, autosave, undo and the game log; generated sound and music; an end-of-game stats screen; and an installable offline web app (PWA). See [docs/PROGRESS.md](docs/PROGRESS.md) for milestone status and [docs/m11/acceptance.md](docs/m11/acceptance.md) for the acceptance checks.
 
 ### Controls
 
@@ -27,7 +27,9 @@ Each human seat owns one controller (join from the setup screen by pressing any 
 
 Review URL parameters: `?quality=high|low`, `?seed=N`, `?speed=slow|normal|fast|instant`, `?auto=human,bot,bank` (start a game immediately).
 
-Review screenshots: [docs/m0/](docs/m0/) (visual prototype), [docs/m2/](docs/m2/), [docs/m3/](docs/m3/), [docs/m4/](docs/m4/), [docs/m5/](docs/m5/), [docs/m6/](docs/m6/), [docs/m7/](docs/m7/), [docs/m8/](docs/m8/), [docs/m9/](docs/m9/).
+Review screenshots: [docs/m0/](docs/m0/) (visual prototype), [docs/m2/](docs/m2/), [docs/m3/](docs/m3/), [docs/m4/](docs/m4/), [docs/m5/](docs/m5/), [docs/m6/](docs/m6/), [docs/m7/](docs/m7/), [docs/m8/](docs/m8/), [docs/m9/](docs/m9/), [docs/m10/](docs/m10/), [docs/m11/](docs/m11/).
+
+**Install:** in Chrome or Edge, open the live build and use "Install Property Night" in the address bar (or the browser menu). After the first visit it also works offline. Sound starts after the first key press, click or controller button (browser autoplay rules); volumes are in the pause menu.
 
 ## Stack
 
@@ -51,6 +53,10 @@ npm run build      # typecheck + production build into dist/
 npm run preview    # serve dist/ on http://localhost:4173
 npm run fonts      # re-copy woff2 files from node_modules into public/fonts
 node scripts/cdp.mjs scripts/plans/m2-human.mjs   # headless Chrome UI check (dev server running)
+node scripts/cdp.mjs scripts/plans/perf.mjs       # draw calls, idle rendering, fps (PN_URL / PN_QUALITY env)
+node scripts/cdp.mjs scripts/plans/boot.mjs       # startup breakdown (pn-scene / pn-ready marks)
+node scripts/cdp.mjs scripts/plans/pwa.mjs        # manifest, service worker and offline reload on the live build
+node scripts/make-icons.mjs                       # render public/icon.svg to the PNG app icons
 ```
 
 ## Layout
@@ -61,10 +67,13 @@ src/
   engine/    pure rules engine: apply(state, action) → { state, events }, legalActions, invariants
   bots/      medium bot, bank-backed bot, headless runner
   render/    Three.js scene: table, board texture, board, tokens, buildings, dice, camera, lighting, quality
-  director/  director (engine events → animations) and the animation queue
-  app/       game controller (state, dispatch, bot pacing, auction timer)
+  director/  director (engine events → animations + sounds) and the animation queue
+  audio/     WebAudio sound effects and generative music (nothing shipped as files)
+  app/       game controller, settings, presets, saves
+  storage/   IndexedDB key-value store
   input/     keyboard + gamepad
-  ui/        Svelte overlay (setup, player cards, context panel, deeds, cards)
+  ui/        Svelte overlay (lobby, player cards, context panel, deeds, cards, editors, stats)
+public/      fonts, app icons, web app manifest, service worker (sw.js)
 tests/       Vitest suites
 ```
 

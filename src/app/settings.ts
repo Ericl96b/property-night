@@ -42,7 +42,14 @@ export function loadSettings(): Settings {
   } catch {
     /* storage unavailable */
   }
-  return { ...DEFAULT_SETTINGS };
+  // First run: Reduce motion starts from the system's "reduce motion" preference.
+  let reduceMotion = DEFAULT_SETTINGS.reduceMotion;
+  try {
+    reduceMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? reduceMotion;
+  } catch {
+    /* no matchMedia */
+  }
+  return { ...DEFAULT_SETTINGS, reduceMotion };
 }
 
 export function saveSettings(s: Settings): void {

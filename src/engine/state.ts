@@ -3,7 +3,16 @@ import { CLASSIC_BOARD, type BoardData } from '../data/classicBoard';
 import { CLASSIC_CHANCE, CLASSIC_CHEST, type Card, type DeckId } from './cards';
 import { nextInt, seedRng, type RngState } from './rng';
 import { CLASSIC_RULES, type Rules } from './rules';
-import type { Seat, SeatKind, State } from './types';
+import type { GameHistory, PlayerStats, Seat, SeatKind, State } from './types';
+
+export const NEW_STATS: PlayerStats = { rentPaid: 0, rentReceived: 0, auctionBuys: 0, directBuys: 0, loansTaken: 0, borrowed: 0, loanInterest: 0 };
+
+/** Keep the money-over-time series at most this long (older samples are thinned 2:1). */
+export const HISTORY_MAX = 240;
+
+function emptyHistory(s: Pick<State, 'players' | 'board' | 'turnNumber'>): GameHistory {
+  return { cash: [{ turn: s.turnNumber, cash: s.players.map((p) => p.cash) }], every: 1, tileRent: s.board.tiles.map(() => 0) };
+}
 
 const UNLIMITED = 1_000_000;
 
@@ -76,7 +85,7 @@ export function newGame(cfg: NewGameConfig): State {
       bankrupt: false,
       lapped: false,
       loans: [],
-      stats: { rentPaid: 0, rentReceived: 0, auctionBuys: 0, directBuys: 0 },
+      stats: { ...NEW_STATS },
     })),
     tiles: board.tiles.map(() => ({ owner: null, buildings: 0, mortgaged: false })),
     bank: {
@@ -99,7 +108,9 @@ export function newGame(cfg: NewGameConfig): State {
     winner: null,
     log: [{ turn: 1, seat: 0, text: `${seats[0].name} goes first` }],
     rng,
+    history: { cash: [], every: 1, tileRent: [] },
   };
+  s.history = emptyHistory(s);
   return s;
 }
 
@@ -113,7 +124,7 @@ export function cloneState(s: State): State {
       jail: p.jail ? { ...p.jail } : null,
       gojf: [...p.gojf],
       loans: p.loans.map((l) => ({ ...l, collateral: [...l.collateral] })),
-      stats: { ...p.stats },
+      stats: { ...NEW_STATS, ...p.stats },
     })),
     tiles: s.tiles.map((t) => ({ ...t })),
     bank: { ...s.bank },
@@ -130,5 +141,9 @@ export function cloneState(s: State): State {
     promises: s.promises.map((p) => ({ ...p })),
     log: s.log.length > 200 ? s.log.slice(-200) : [...s.log],
     rng: [...s.rng] as RngState,
+    // Samples are immutable once recorded, so only the outer arrays are copied.
+    history: s.history
+      ? { every: s.history.every, cash: [...s.history.cash], tileRent: [...s.history.tileRent] }
+      : emptyHistory(s),
   };
 }

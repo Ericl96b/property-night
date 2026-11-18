@@ -20,6 +20,27 @@ import { BoardPresets, printView } from './app/boardPresets';
 import { AUTOSAVE_ID, Saves, makeSave, type SaveFile } from './app/saves';
 import { downloadText } from './app/presets';
 import { CLASSIC_RULES } from './engine';
+import { Sound } from './audio/sound';
+
+/**
+ * PWA (SPEC §2): offline play after the first visit. Production only (the dev server must
+ * never be cached). Once the worker is active, hand it everything this page loaded so the
+ * first visit is cached in full.
+ */
+function registerServiceWorker(): void {
+  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  const sendLoaded = (sw: ServiceWorker | null) => {
+    const urls = performance.getEntriesByType('resource').map((e) => e.name);
+    sw?.postMessage({ type: 'cache', urls: [location.href, ...urls] });
+  };
+  navigator.serviceWorker
+    .register(`${import.meta.env.BASE_URL}sw.js`)
+    .then(() => navigator.serviceWorker.ready)
+    .then((reg) => sendLoaded(reg.active))
+    .catch(() => {
+      /* offline support is optional */
+    });
+}
 
 async function boot(): Promise<void> {
   const root = document.getElementById('app')!;
@@ -37,6 +58,7 @@ async function boot(): Promise<void> {
   if (sp && ['slow', 'normal', 'fast', 'instant'].includes(sp)) settings.speed = sp;
 
   const scene = await GameScene.create(root, CLASSIC_BOARD, settings.quality);
+  performance.mark('pn-scene');
 
   let controller!: GameController;
   const director = new Director(scene, {
@@ -45,9 +67,17 @@ async function boot(): Promise<void> {
     idle: () => controller.onIdle(),
   });
   director.settings = () => settings;
+  // Sound starts on the first key, click, touch or controller button (browser autoplay rules).
+  const sound = new Sound();
+  director.sound = sound;
+  const unlockAudio = () => sound.unlock();
+  for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, unlockAudio, { capture: true });
+  document.addEventListener('visibilitychange', () => sound.setHidden(document.hidden));
   controller = new GameController(director);
 
   const input = new InputManager(undefined, undefined, browserStore);
+  // Controller buttons may not count as a user gesture for autoplay, but try anyway.
+  input.onAnyButton = unlockAudio;
   const kv = await openKV();
   const presets = new RulesPresets(kv);
   const boards = new BoardPresets(kv);
@@ -56,6 +86,7 @@ async function boot(): Promise<void> {
   let boardKey = JSON.stringify(printView(CLASSIC_BOARD, CLASSIC_RULES));
 
   const applySettings = () => {
+    sound.setVolumes(settings);
     input.swapNintendo = settings.swapNintendo;
     controller.undoEnabled = settings.undo;
     scene.setSpeed(settings.speed);
@@ -252,8 +283,11 @@ async function boot(): Promise<void> {
     f(s);
     controller.load(s);
   };
-  (window as unknown as { __pn: unknown }).__pn = { scene, controller, director, settings, forceDice, patchState, input, app, saves };
+  (window as unknown as { __pn: unknown }).__pn = { scene, controller, director, settings, forceDice, patchState, input, app, saves, sound };
   scene.renderer.requestRender();
+  // Startup budget (SPEC §10.10): navigation start → interactive menu.
+  performance.mark('pn-ready');
+  registerServiceWorker();
   setTimeout(() => splash.classList.add('gone'), 50);
   setTimeout(() => splash.remove(), 700);
 }

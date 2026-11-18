@@ -25,6 +25,13 @@
     onsave?: () => void;
   } = $props();
 
+  const VOLUMES: { key: 'volumeMaster' | 'volumeMusic' | 'volumeEffects'; label: string }[] = [
+    { key: 'volumeMaster', label: 'Volume' },
+    { key: 'volumeMusic', label: 'Music' },
+    { key: 'volumeEffects', label: 'Sound effects' },
+  ];
+  const STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
   let confirm = $state<{ kind: 'forfeit'; seat: number } | { kind: 'new' } | null>(null);
   const humans = $derived(gs ? gs.seats.map((s, i) => ({ s, i })).filter(({ s, i }) => s.kind === 'human' && !gs.players[i].bankrupt) : []);
 </script>
@@ -67,6 +74,13 @@
             <option value="auto">Auto</option><option value="high">High</option><option value="low">Low</option>
           </select>
         </label>
+        {#each VOLUMES as v (v.key)}
+          <label>{v.label}
+            <select value={String(Math.round(settings[v.key] * 10) * 10)} onchange={(e) => onsetting({ [v.key]: Number((e.currentTarget as HTMLSelectElement).value) / 100 })}>
+              {#each STEPS as p}<option value={String(p)}>{p === 0 ? 'Off' : `${p}%`}</option>{/each}
+            </select>
+          </label>
+        {/each}
         <label class="chk"><input type="checkbox" checked={settings.boardRotation} onchange={(e) => onsetting({ boardRotation: (e.currentTarget as HTMLInputElement).checked })} /> Board rotation</label>
         <label class="chk"><input type="checkbox" checked={settings.cameraFollow} onchange={(e) => onsetting({ cameraFollow: (e.currentTarget as HTMLInputElement).checked })} /> Camera follow</label>
         <label class="chk"><input type="checkbox" checked={settings.undo} onchange={(e) => onsetting({ undo: (e.currentTarget as HTMLInputElement).checked })} /> Undo last decision</label>
