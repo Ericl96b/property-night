@@ -2,9 +2,11 @@
 // idle, frame rate while animating. URL: PN_URL (default: dev server), quality: PN_QUALITY.
 const base = process.env.PN_URL ?? 'http://localhost:5173/';
 const quality = process.env.PN_QUALITY ?? 'high';
+// PN_AO=1 / 0 forces the ambient-occlusion setting (Settings → Graphics).
+const ao = process.env.PN_AO ? `&ao=${process.env.PN_AO}` : '';
 
 export default {
-  url: `${base}?auto=human,bot,bot,bot,bot,bot&seed=3&quality=${quality}&speed=normal`,
+  url: `${base}?auto=human,bot,bot,bot,bot,bot&seed=3&quality=${quality}&speed=normal${ao}`,
   steps: [
     { until: () => !!window.__pn?.controller?.state, label: 'booted', timeout: 30000 },
     {

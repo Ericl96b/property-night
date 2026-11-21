@@ -163,7 +163,7 @@ Where SPEC.md is silent, the decision taken is recorded here (SPEC §0).
 
 ## Alpha refinements: owner answers to the open questions (2026-11-18)
 
-- **Houses** are 22% of the tile width: the widest four can be with small gaps (≈2.4 px of the 20.4 px slot pitch at print scale), with the outer houses still inside the tile edge. Hotels stay at 70%.
+- *Superseded by Batch 3 (themed buildings, 2026-11-21).* **Houses** are 22% of the tile width: the widest four can be with small gaps (≈2.4 px of the 20.4 px slot pitch at print scale), with the outer houses still inside the tile edge. Hotels stay at 70%.
 - **Board fit:** the rest camera now sizes the board so its widest projected edge stays 24 logical px clear of both side panels, and at most 88% of the screen height. At the 58° pitch the near edge is wider than the board is tall.
   - It's solved for the real window aspect and re-solved on resize (`CameraDirector.setViewport`; panel geometry in `src/ui/stage.ts`). One solve holds for all four rotations because the board is square.
   - Result: the board fills 77% of the height at 16:9 and 70% at 16:10, with 24 px clearance at every rotation.
@@ -217,3 +217,32 @@ These change approved SPEC behavior at the owner's request.
   - A bank-backed bot froze the game on a speed-die bus or triples choice. It now takes the first bus option, or stays put on triples.
   - With bank loans on, a normal bot in debt could never declare bankruptcy, because a loan it would never take counted as a way out, so the game froze. Normal bots never borrow (SPEC §3), so their borrowing capacity is now 0.
 - **Performance:** worst-case board 93 draw calls (budget 150). Signs and decks cost about 2 fps on this machine's headless browser.
+
+## Batch 3: themed buildings (owner request, 2026-11-21)
+
+Each color group gets its own house and hotel design, replacing the green and red boxes. The designs were approved in a separate 3D look test; this batch only integrates them. Spec: `docs/batch3/SPEC-buildings.md`.
+
+| Group | House | Hotel |
+| --- | --- | --- |
+| brown | Cottage | Roadside Inn |
+| lightBlue | Beach Bungalow | Seaside Hotel |
+| pink | Painted Lady | The Rosemont |
+| orange | Brownstone | Downtown Hotel |
+| red | Alpine Chalet | Ski Lodge |
+| yellow | Villa Mediterranea | Hotel Miramar |
+| green | Georgian Manor | The Pacific |
+| darkBlue | Modern Villa | Art Deco Tower |
+
+- **Asset module:** `src/render/buildingModels.js` is the owner's `buildings.js`, copied byte for byte; the `three/addons/...` imports resolve, so no edit was needed. The game uses only `buildGameAssets`; types live in `buildingModels.d.ts`. Accents come from the board's group colors, so custom presets recolor the buildings (`Buildings.setBoard` rebuilds and re-places everything without animation).
+- **Scale:** 0.016 board units per model unit, uniform, houses and hotels alike. Widest house (Modern Villa) 0.0198 against the 0.0204 slot pitch; deepest design (Ski Lodge) 0.0215 against the 0.038 band. Hotels come out at about 29–36% of the tile width instead of the old 70%: that is the owner-approved house-to-hotel proportion from the look test.
+- **Rendering:** one `BatchedMesh` per finish (18), each sized for 5 × street tiles. A building is one instance in every batch its design uses. `glass`, `railing` and `print` cast no shadow. Drops animate the instance matrices; the sell fade uses temporary meshes sharing the part geometry with transparent clones of the finish materials.
+- **Idle animations frozen:** the flags, bell, marquee lights and beacon from the look test stay in their rest pose, so rendering stays on demand (0 idle frames).
+- **Judgment calls:**
+  - The spec moved, unchanged, to `docs/batch3/SPEC-buildings.md`.
+  - `Buildings.designSizes()` (read-only) was added for the batch3 fit check.
+  - The sell-fade meshes cast shadows by their finish's rule.
+  - `perf.mjs` takes `PN_AO=1/0`; `batch3.mjs` gives every group one hotel on the full board (pink and green have no `i % 3 === 0` street).
+- **Performance (worst-case board, headless Chrome on this machine):**
+  - AO off: 122 draw calls at High and 123 at Low (budget 150); 0 idle frames in 2 s.
+  - AO on (High): **247 draw calls, over budget.** Hiding all buildings still gives 181: the GTAO normal pass redraws the whole scene, and the board was already over 150 with AO on after Batch 2 (signs, decks), which only measured AO off. The buildings add 33 calls with AO off and about 66 with AO on. The owner accepted this on 2026-11-21. AO is off by default.
+  - `buildingsMs` (the `buildGameAssets` call): 360–680 ms across runs, on a noisy headless machine. The build is not deferred; the owner can ask for that if startup feels slow.

@@ -1,59 +1,17 @@
-// Houses and hotels (SPEC §10.5): lacquered wood meshes standing on the color band,
-// instanced (one draw call per type). Build: drops in from 0.03 above with a short bounce.
-// Sell: lifts and fades (a temporary non-instanced copy carries the fade).
+// Houses and hotels (SPEC §10.5, Batch 3): each color group has its own house and hotel design
+// from the approved asset module (buildingModels.js), accented in the group's board color.
+// Drawn as one BatchedMesh per surface finish; a building is one instance in every batch its
+// design has a part in. Build: drops in from 0.03 above with a short bounce (instance matrices
+// animate). Sell: lifts and fades (temporary meshes with transparent material clones).
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import {
-  BAND_CENTER_LY,
-  BOARD_TOP,
-  PX,
-  TILE_W_PX,
-  houseSlotLX,
-  tileFrame,
-  tileLocalToWorld,
-  tileYaw,
-} from './layout';
+import type { BoardData, GroupId } from '../data/classicBoard';
+import { type FinishName, type GameBuildingAssets, buildGameAssets } from './buildingModels.js';
+import { BAND_CENTER_LY, BOARD_TOP, houseSlotLX, tileFrame, tileLocalToWorld, tileYaw } from './layout';
 
-// Houses are ≈22% of the tile width: as wide as four can stand on the band with small gaps
-// (SPEC §10.5 says ≈30%, which cannot fit four across; owner-approved, see DECISIONS.md).
-const HOUSE = { w: TILE_W_PX * 0.22 * PX, d: 0.019, h: 0.0115, roof: 0.0095 };
-const HOTEL = { w: TILE_W_PX * 0.7 * PX, d: 0.024, h: 0.0150, roof: 0.0105 };
-const MAX_HOUSES = 32;
-const MAX_HOTELS = 12;
+/** Board units per model unit, uniform for houses and hotels (Batch 3 spec §5). */
+export const BUILDING_SCALE = 0.016;
 
-function buildingGeometry(dim: typeof HOUSE, body: THREE.Color, roof: THREE.Color): THREE.BufferGeometry {
-  const bodyGeo = new THREE.BoxGeometry(dim.w, dim.h, dim.d);
-  bodyGeo.translate(0, dim.h / 2, 0);
-  // Triangular-prism roof, ridge along the width (along the band).
-  const tri = new THREE.Shape();
-  const overhang = 0.0007;
-  tri.moveTo(-dim.d / 2 - overhang, 0);
-  tri.lineTo(dim.d / 2 + overhang, 0);
-  tri.lineTo(0, dim.roof);
-  tri.closePath();
-  const roofLen = dim.w + overhang * 2;
-  const roofGeo = new THREE.ExtrudeGeometry(tri, { depth: roofLen, bevelEnabled: false });
-  roofGeo.translate(0, 0, -roofLen / 2);
-  roofGeo.rotateY(Math.PI / 2);
-  roofGeo.translate(0, dim.h, 0);
-  const paint = (g: THREE.BufferGeometry, c: THREE.Color) => {
-    const n = g.attributes.position.count;
-    const arr = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) c.toArray(arr, i * 3);
-    g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
-    return g.index ? g.toNonIndexed() : g;
-  };
-  const merged = mergeGeometries([paint(bodyGeo, body), paint(roofGeo, roof)], false);
-  if (!merged) throw new Error('building merge failed');
-  merged.computeVertexNormals();
-  return merged;
-}
-
-/** Lighten in sRGB (perceptual) space, then convert: mixing in linear space washes colors out. */
-const lighten = (hex: number, k: number) => {
-  const c = [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255].map((v) => Math.round(v + (255 - v) * k));
-  return new THREE.Color((c[0] << 16) | (c[1] << 8) | c[2]);
-};
+const GROUP_IDS: GroupId[] = ['brown', 'lightBlue', 'pink', 'orange', 'red', 'yellow', 'green', 'darkBlue'];
 
 export type BuildingKind = 'house' | 'hotel';
 
@@ -61,42 +19,91 @@ interface Placed {
   kind: BuildingKind;
   tile: number;
   slot: number; // house slot 0–3; hotel 0
-  matrix: THREE.Matrix4;
+  group: GroupId;
+  ids: { batch: THREE.BatchedMesh; id: number }[];
 }
 
 export class Buildings {
   readonly group = new THREE.Group();
-  private houses: THREE.InstancedMesh;
-  private hotels: THREE.InstancedMesh;
-  private material: THREE.MeshPhysicalMaterial;
-  private houseGeo: THREE.BufferGeometry;
-  private hotelGeo: THREE.BufferGeometry;
+  /** Milliseconds the last buildGameAssets call took. */
+  lastBuildMs = 0;
+  private board!: BoardData;
+  private assets!: GameBuildingAssets;
+  private batches = new Map<FinishName, THREE.BatchedMesh>();
+  /** (group|kind|finish) → geometry id in that finish's batch. */
+  private geoIds = new Map<string, number>();
   private placed: Placed[] = [];
-  /** Instances currently animating (excluded from the instanced meshes). */
-  private animating = new Map<Placed, THREE.Mesh>();
 
-  constructor() {
-    this.material = new THREE.MeshPhysicalMaterial({
-      vertexColors: true,
-      roughness: 0.35,
-      metalness: 0,
-      clearcoat: 0.25,
-      clearcoatRoughness: 0.3,
-      envMapIntensity: 0.35,
-    });
-    // Linear colors: Color() parses hex as sRGB and converts.
-    this.houseGeo = buildingGeometry(HOUSE, new THREE.Color(0x2e8b4e), lighten(0x2e8b4e, 0.1));
-    this.hotelGeo = buildingGeometry(HOTEL, new THREE.Color(0xb4322a), lighten(0xb4322a, 0.1));
-    this.houses = new THREE.InstancedMesh(this.houseGeo, this.material, MAX_HOUSES);
-    this.hotels = new THREE.InstancedMesh(this.hotelGeo, this.material, MAX_HOTELS);
-    for (const m of [this.houses, this.hotels]) {
-      m.count = 0;
-      m.castShadow = true;
-      m.receiveShadow = true;
-      m.frustumCulled = false;
-      this.group.add(m);
-    }
+  constructor(board: BoardData) {
     this.group.name = 'buildings';
+    this.build(board);
+  }
+
+  private build(board: BoardData): void {
+    this.board = board;
+    const colors: Partial<Record<GroupId, number>> = {};
+    for (const id of GROUP_IDS) colors[id] = parseInt(board.groups[id].color.replace('#', ''), 16);
+    const t0 = performance.now();
+    this.assets = buildGameAssets({ colors });
+    this.lastBuildMs = performance.now() - t0;
+
+    const { designs, finishes, castShadow } = this.assets;
+    const sums = new Map<FinishName, { v: number; i: number }>();
+    for (const id of GROUP_IDS) {
+      for (const kind of ['house', 'hotel'] as const) {
+        for (const p of designs[id][kind].parts) {
+          const s = sums.get(p.finish) ?? { v: 0, i: 0 };
+          s.v += p.geometry.attributes.position.count;
+          s.i += p.geometry.index!.count;
+          sums.set(p.finish, s);
+        }
+      }
+    }
+    const streets = board.tiles.filter((t) => t.type === 'street').length;
+    for (const [finish, s] of sums) {
+      const b = new THREE.BatchedMesh(5 * streets, s.v, s.i, finishes[finish]);
+      b.name = `buildings-${finish}`;
+      b.castShadow = castShadow[finish];
+      b.receiveShadow = true;
+      b.sortObjects = false;
+      b.perObjectFrustumCulled = true;
+      b.frustumCulled = false;
+      this.batches.set(finish, b);
+      this.group.add(b);
+    }
+    for (const id of GROUP_IDS) {
+      for (const kind of ['house', 'hotel'] as const) {
+        for (const p of designs[id][kind].parts) {
+          this.geoIds.set(`${id}|${kind}|${p.finish}`, this.batches.get(p.finish)!.addGeometry(p.geometry));
+        }
+      }
+    }
+  }
+
+  private teardown(): void {
+    for (const b of this.batches.values()) {
+      this.group.remove(b);
+      b.dispose();
+    }
+    this.batches.clear();
+    this.geoIds.clear();
+    this.assets.dispose();
+  }
+
+  /** Board preset changed: rebuild the designs in the new colors and re-place everything at rest. */
+  setBoard(board: BoardData): void {
+    const keep = this.placed.map(({ kind, tile, slot }) => ({ kind, tile, slot }));
+    this.placed = [];
+    this.teardown();
+    this.build(board);
+    for (const k of keep) this.placeNew(k.kind, k.tile, k.slot, 0);
+  }
+
+  /** Design sizes in model units (for the batch3 fit check). */
+  designSizes(): Record<GroupId, { house: THREE.Vector3; hotel: THREE.Vector3 }> {
+    const out = {} as Record<GroupId, { house: THREE.Vector3; hotel: THREE.Vector3 }>;
+    for (const id of GROUP_IDS) out[id] = { house: this.assets.designs[id].house.size.clone(), hotel: this.assets.designs[id].hotel.size.clone() };
+    return out;
   }
 
   countOn(tile: number): { houses: number; hotel: boolean } {
@@ -111,34 +118,49 @@ export class Buildings {
     };
   }
 
-  private matrixFor(kind: BuildingKind, tile: number, slot: number, lift = 0, scale = 1): THREE.Matrix4 {
+  private matrixFor(kind: BuildingKind, tile: number, slot: number, lift = 0): THREE.Matrix4 {
     const f = tileFrame(tile);
     const lx = kind === 'hotel' ? 0 : houseSlotLX(slot);
     const [x, z] = tileLocalToWorld(f, lx, BAND_CENTER_LY);
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), tileYaw(f));
-    return new THREE.Matrix4().compose(new THREE.Vector3(x, BOARD_TOP + lift, z), q, new THREE.Vector3(scale, scale, scale));
+    const s = BUILDING_SCALE;
+    return new THREE.Matrix4().compose(new THREE.Vector3(x, BOARD_TOP + lift, z), q, new THREE.Vector3(s, s, s));
   }
 
-  private rebuild(): void {
-    let h = 0;
-    let H = 0;
-    for (const p of this.placed) {
-      if (this.animating.has(p)) continue;
-      if (p.kind === 'house') this.houses.setMatrixAt(h++, p.matrix);
-      else this.hotels.setMatrixAt(H++, p.matrix);
-    }
-    this.houses.count = h;
-    this.hotels.count = H;
-    this.houses.instanceMatrix.needsUpdate = true;
-    this.hotels.instanceMatrix.needsUpdate = true;
+  private partsOf(group: GroupId, kind: BuildingKind) {
+    return this.assets.designs[group][kind].parts;
+  }
+
+  /** Add a building's instances to every batch its design uses. */
+  private placeNew(kind: BuildingKind, tile: number, slot: number, lift: number): Placed {
+    const group = this.board.tiles[tile].group!;
+    const m = this.matrixFor(kind, tile, slot, lift);
+    const ids = this.partsOf(group, kind).map((part) => {
+      const batch = this.batches.get(part.finish)!;
+      const id = batch.addInstance(this.geoIds.get(`${group}|${kind}|${part.finish}`)!);
+      batch.setMatrixAt(id, m);
+      return { batch, id };
+    });
+    const p: Placed = { kind, tile, slot, group, ids };
+    this.placed.push(p);
+    return p;
+  }
+
+  private unplace(p: Placed): void {
+    for (const { batch, id } of p.ids) batch.deleteInstance(id);
+    p.ids = [];
+    this.placed = this.placed.filter((q) => q !== p);
+  }
+
+  private setMatrix(p: Placed, m: THREE.Matrix4): void {
+    for (const { batch, id } of p.ids) batch.setMatrixAt(id, m);
   }
 
   /** Place without animation. */
   set(tile: number, houses: number, hotel: boolean): void {
-    this.placed = this.placed.filter((p) => p.tile !== tile);
-    if (hotel) this.placed.push({ kind: 'hotel', tile, slot: 0, matrix: this.matrixFor('hotel', tile, 0) });
-    else for (let s = 0; s < houses; s++) this.placed.push({ kind: 'house', tile, slot: s, matrix: this.matrixFor('house', tile, s) });
-    this.rebuild();
+    for (const p of this.placed.filter((q) => q.tile === tile)) this.unplace(p);
+    if (hotel) this.placeNew('hotel', tile, 0, 0);
+    else for (let s = 0; s < houses; s++) this.placeNew('house', tile, s, 0);
   }
 
   /**
@@ -148,32 +170,21 @@ export class Buildings {
   add(tile: number, durationScale = 1): ((dt: number) => boolean) | undefined {
     const { houses, hotel } = this.countOn(tile);
     if (hotel) return undefined;
-    let p: Placed;
-    if (houses === 4) {
-      this.placed = this.placed.filter((q) => q.tile !== tile);
-      p = { kind: 'hotel', tile, slot: 0, matrix: this.matrixFor('hotel', tile, 0) };
-    } else {
-      p = { kind: 'house', tile, slot: houses, matrix: this.matrixFor('house', tile, houses) };
-    }
-    this.placed.push(p);
-    const mesh = new THREE.Mesh(p.kind === 'house' ? this.houseGeo : this.hotelGeo, this.material);
-    mesh.castShadow = true;
-    mesh.matrixAutoUpdate = false;
-    this.group.add(mesh);
-    this.animating.set(p, mesh);
-    this.rebuild();
     const dur = 0.18 * durationScale;
     const drop = 0.03;
-    let t = 0;
-    const finish = () => {
-      this.group.remove(mesh);
-      this.animating.delete(p);
-      this.rebuild();
-    };
+    let kind: BuildingKind = 'house';
+    let slot = houses;
+    if (houses === 4) {
+      for (const q of this.placed.filter((x) => x.tile === tile)) this.unplace(q);
+      kind = 'hotel';
+      slot = 0;
+    }
     if (dur <= 0) {
-      finish();
+      this.placeNew(kind, tile, slot, 0);
       return undefined;
     }
+    const p = this.placeNew(kind, tile, slot, drop);
+    let t = 0;
     return (dt) => {
       t += dt;
       const k = Math.min(1, t / dur);
@@ -186,45 +197,48 @@ export class Buildings {
         const u = (k - 0.7) / 0.3;
         lift = 0.0025 * Math.sin(u * Math.PI);
       }
-      mesh.matrix.copy(this.matrixFor(p.kind, p.tile, p.slot, lift));
-      if (k >= 1) {
-        finish();
-        return false;
-      }
-      return true;
+      // A set() during the drop may have replaced this building; then there is nothing to move.
+      if (p.ids.length) this.setMatrix(p, this.matrixFor(p.kind, p.tile, p.slot, k >= 1 ? 0 : lift));
+      return k < 1;
     };
   }
 
-  /** Remove one building (hotel → none in M0) with lift-and-fade. */
+  /** Remove one building (the highest house slot, or the hotel) with lift-and-fade. */
   remove(tile: number, durationScale = 1): ((dt: number) => boolean) | undefined {
     const on = this.placed.filter((p) => p.tile === tile);
     if (!on.length) return undefined;
     const p = on.reduce((a, b) => (b.slot > a.slot || b.kind === 'hotel' ? b : a));
-    this.placed = this.placed.filter((q) => q !== p);
-    this.rebuild();
-    const mat = this.material.clone();
-    mat.transparent = true;
-    const mesh = new THREE.Mesh(p.kind === 'house' ? this.houseGeo : this.hotelGeo, mat);
-    mesh.matrixAutoUpdate = false;
-    mesh.matrix.copy(p.matrix);
-    this.group.add(mesh);
+    this.unplace(p);
     const dur = 0.35 * durationScale;
+    if (dur <= 0) return undefined;
+    const { finishes, castShadow } = this.assets;
+    const meshes = this.partsOf(p.group, p.kind).map((part) => {
+      const mat = finishes[part.finish].clone();
+      mat.transparent = true;
+      const mesh = new THREE.Mesh(part.geometry, mat);
+      mesh.castShadow = castShadow[part.finish];
+      mesh.matrixAutoUpdate = false;
+      this.group.add(mesh);
+      return mesh;
+    });
     let t = 0;
-    const done = () => {
-      this.group.remove(mesh);
-      mat.dispose();
+    const apply = (k: number) => {
+      const m = this.matrixFor(p.kind, p.tile, p.slot, 0.03 * k * k);
+      for (const mesh of meshes) {
+        mesh.matrix.copy(m);
+        (mesh.material as THREE.MeshPhysicalMaterial).opacity = 1 - k;
+      }
     };
-    if (dur <= 0) {
-      done();
-      return undefined;
-    }
+    apply(0);
     return (dt) => {
       t += dt;
       const k = Math.min(1, t / dur);
-      mesh.matrix.copy(this.matrixFor(p.kind, p.tile, p.slot, 0.03 * k * k));
-      mat.opacity = 1 - k;
+      apply(k);
       if (k >= 1) {
-        done();
+        for (const mesh of meshes) {
+          this.group.remove(mesh);
+          (mesh.material as THREE.Material).dispose();
+        }
         return false;
       }
       return true;

@@ -58,6 +58,7 @@ This file is the hand-off log for unattended work. A resumed session reads it fi
   - slower speed presets (Relaxed / Normal / Fast / Instant)
 
   See DECISIONS.md, "Batch 2". Check: `node scripts/cdp.mjs scripts/plans/batch2.mjs .snapshots`.
+- [x] **Batch 3** (owner request, 2026-11-21): themed houses and hotels, one design pair per color group, in the group's board color. See DECISIONS.md, "Batch 3". Check: `node scripts/cdp.mjs scripts/plans/batch3.mjs .snapshots`.
 
 ## Open questions for the owner
 

@@ -339,8 +339,8 @@ Nine tokens: teacup, key, bicycle, cat, rocket, crown, sailboat, umbrella, gramo
 
 Fixes the approved complaint that houses were hard to see and hidden by tokens.
 
-- Real meshes: house = box body + triangular-prism roof; hotel = longer, taller box + roof. Lacquered wood: house green #2E8B4E, hotel red #B4322A, roughness 0.35, slightly lighter roof color.
-- Size: a house is ≈ 30% of the tile width wide; 4 fit across the color band with small gaps. A hotel spans ≈ 70% of the band.
+- Real meshes from `src/render/buildingModels.js`: each color group has its own house and hotel design (table in DECISIONS.md, Batch 3). The group's board color is the accent. Lacquered-wood and painted finishes, 18 shared materials.
+- Size: one uniform scale (0.016 board units per model unit) for houses and hotels; four houses fit across the band; hotels keep the approved house-to-hotel proportions (≈ 29–36% of the tile width).
 - **Placement: standing on the color band** (the band is the building row, like the real board). Tokens never stand on the band, so buildings are never hidden.
 - Cast shadows. Build animation: drops in from 0.03 above with a short bounce (180 ms) and a wooden "tock". Sell: lifts and fades.
 

@@ -23,6 +23,8 @@ export interface SceneStats {
   tableMs: number;
   uploadMs: number;
   startupMs: number;
+  /** buildGameAssets time (Batch 3). */
+  buildingsMs: number;
   gpu: string;
 }
 
@@ -34,7 +36,7 @@ export class GameScene {
   table!: THREE.Mesh;
   board!: BoardObject;
   tokens = new TokenLayer();
-  buildings = new Buildings();
+  buildings!: Buildings;
   /** SOLD signs on owned properties. */
   signs!: Signs;
   /** Chance and Community Chest card stacks. */
@@ -43,7 +45,7 @@ export class GameScene {
   dice!: Dice;
   quality!: QualityProfile;
   qualitySetting: QualitySetting = 'auto';
-  stats: SceneStats = { boardMs: 0, boardSize: 0, tableMs: 0, uploadMs: 0, startupMs: 0, gpu: '' };
+  stats: SceneStats = { boardMs: 0, boardSize: 0, tableMs: 0, uploadMs: 0, startupMs: 0, buildingsMs: 0, gpu: '' };
 
   private constructor(container: HTMLElement, private boardData: BoardData) {
     this.renderer = new Renderer(container, this.camera.camera);
@@ -62,6 +64,8 @@ export class GameScene {
     scene.add(s.camera.lightRig);
     s.lights = createLighting(scene, s.camera.lightRig, gl);
     s.lights.setShadowSize(s.quality.shadowMap);
+    s.buildings = new Buildings(board);
+    s.stats.buildingsMs = s.buildings.lastBuildMs;
 
     const tableTex = generateTableTextures(s.quality.tableTexture);
     s.stats.tableMs = tableTex.ms;
@@ -139,6 +143,8 @@ export class GameScene {
     this.stats.boardMs = bt.ms;
     this.board.setFaceTexture(bt.texture);
     this.decals.setBoardTexture(bt.texture);
+    this.buildings.setBoard(board);
+    this.stats.buildingsMs = this.buildings.lastBuildMs;
     this.renderer.requestRender();
   }
 }

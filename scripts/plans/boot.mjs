@@ -15,7 +15,7 @@ export default {
           .sort((a, b) => b.end - a.end)
           .slice(0, 12);
         const marks = performance.getEntriesByType('mark').map((m) => `${m.name}@${Math.round(m.startTime)}`);
-        return { now: Math.round(performance.now()), scene: { startupMs: Math.round(st.startupMs), tableMs: Math.round(st.tableMs), boardMs: Math.round(st.boardMs), uploadMs: Math.round(st.uploadMs) }, marks, res };
+        return { now: Math.round(performance.now()), scene: { startupMs: Math.round(st.startupMs), tableMs: Math.round(st.tableMs), boardMs: Math.round(st.boardMs), uploadMs: Math.round(st.uploadMs), buildingsMs: Math.round(st.buildingsMs) }, marks, res };
       },
       label: 'boot breakdown',
     },
