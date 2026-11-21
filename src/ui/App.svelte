@@ -7,7 +7,7 @@
   import type { Intent } from '../input/keys';
   import { decide } from '../app/ownership';
   import { glyphFamily, type InputManager, type PadInfo } from '../input/manager';
-  import { moveFocus, type Dir } from './focus';
+  import { cycleFocus, moveFocus, type Dir } from './focus';
   import { stageFit } from './stage';
   import { SPEED_FACTOR } from '../director/queue';
   import LogPanel from './components/LogPanel.svelte';
@@ -30,6 +30,12 @@
   import ActionButton from './components/ActionButton.svelte';
   import { gameOverText, players, primaryButtons } from './present';
   import { symbolUrl } from '../render/symbols';
+  import BenchmarkPanel from './components/BenchmarkPanel.svelte';
+  import TestBoardControls from './components/TestBoard.svelte';
+  import PerfOverlay from './components/PerfOverlay.svelte';
+  import type { PerfApi } from '../bench/perfApi';
+  import type { TestBoard } from '../bench/testBoard';
+  import type { State } from '../engine';
 
   let {
     controller,
@@ -47,6 +53,7 @@
     onsetting,
     onnewgame,
     onfullscreen,
+    perf,
   }: {
     controller: GameController;
     input: InputManager;
@@ -63,6 +70,7 @@
     onsetting: (patch: Partial<Settings>) => void;
     onnewgame: () => void;
     onfullscreen: () => void;
+    perf: PerfApi;
   } = $props();
 
   // Raw: the game state is replaced wholesale, never mutated, so no deep proxy is needed.
@@ -87,7 +95,70 @@
   let waitingSeat = $state<number | null>(null);
   let navFocus = false;
   let loanSeat = $state<number | null>(null);
-  let screen = $state<'menu' | 'setup'>('menu');
+  let screen = $state<'menu' | 'setup' | 'testboard'>('menu');
+
+  // Batch 4: benchmark, test board and performance overlay.
+  let benchOpen = $state(false);
+  let benchRunning = $state(false);
+  let benchFrom: 'menu' | 'testboard' = 'menu';
+  let benchState = $state.raw<State | null>(null);
+  let benchPanel = $state<{ back: () => void } | null>(null);
+  let tb = $state.raw<TestBoard | null>(null);
+  let tbV = $state(0);
+  let tbDetailed = $state(false);
+  /** Called by the benchmark runner: moments during the run belong to its own board state. */
+  export function setBenchState(s: State | null) {
+    benchState = s;
+  }
+  /** The test board's fields changed (main.ts forwards TestBoard.onChange). */
+  export function testBoardChanged() {
+    tbV++;
+  }
+  function openTestBoard() {
+    menuSettings = false;
+    tb = perf.enterTestBoard();
+    tbDetailed = settings.perfOverlay === 'detailed';
+    screen = 'testboard';
+    tbV++;
+  }
+  function exitTestBoard() {
+    perf.leaveTestBoard();
+    tb = null;
+    screen = 'menu';
+  }
+  function openBench(from: 'menu' | 'testboard') {
+    benchFrom = from;
+    menuSettings = false;
+    // The benchmark builds its own scene; the test board's layout comes back afterwards.
+    if (from === 'testboard') tb?.exit();
+    benchOpen = true;
+  }
+  function closeBench() {
+    benchOpen = false;
+    benchRunning = false;
+    if (benchFrom === 'testboard' && screen === 'testboard') {
+      tb = perf.enterTestBoard();
+      tbV++;
+    } else perf.clearScene();
+  }
+  // `settings` is a plain object owned by main.ts; mirror the overlay setting reactively.
+  let overlaySetting = $state(settings.perfOverlay);
+  function setSetting(patch: Partial<Settings>) {
+    onsetting(patch);
+    if (patch.perfOverlay) overlaySetting = patch.perfOverlay;
+  }
+  /** Overlay mode: the setting, forced to at least FPS in the test board (§4.4). */
+  const perfMode = $derived<'off' | 'fps' | 'detailed'>(screen === 'testboard' && !started ? (tbDetailed ? 'detailed' : 'fps') : overlaySetting);
+  $effect(() => {
+    perf.renderer.setOverlay(perfMode !== 'off');
+  });
+  $effect(() => {
+    // Detailed in the test board renders continuously so the numbers are live; anything else
+    // stays render-on-demand (the benchmark manages continuous mode itself while it runs).
+    const live = screen === 'testboard' && perfMode === 'detailed' && !benchOpen;
+    if (!benchRunning) perf.renderer.setContinuous(live);
+    perf.setNudgeAnyPad(screen === 'testboard' && !benchOpen);
+  });
   let savingOpen = $state(false);
   let menuSettings = $state(false);
   let compose = $state<{ seat: number; initial: TradeOffer | null; counter: boolean } | null>(null);
@@ -214,7 +285,7 @@
     return amt <= gs!.players[seat].cash ? amt : null;
   }
 
-  const PANELS = ['.remap', '.savep', '.pause', '.padlost', '.statsp', '.logp', '.loans', '.trade', '.manage', '.auction', '.setup', '.context', '.banner'];
+  const PANELS = ['.benchp', '.testb', '.remap', '.savep', '.pause', '.padlost', '.statsp', '.logp', '.loans', '.trade', '.manage', '.auction', '.setup', '.context', '.banner'];
   function topPanel(): Element | null {
     const stage = document.querySelector('.stage');
     if (!stage) return null;
@@ -257,10 +328,58 @@
   }
 
   /**
+   * Test board (§4.3): left/right select the previous/next property, up/down step through the
+   * controls, LB/RB (Q/E) rotate, Square/Y (B key) adds and Triangle/X (V key) removes a
+   * building, Back leaves.
+   */
+  function testBoardIntent(i: Intent, t: TestBoard): boolean {
+    switch (i) {
+      case 'back':
+        exitTestBoard();
+        return true;
+      case 'navLeft':
+      case 'navRight':
+        t.step(i === 'navRight' ? 1 : -1);
+        return true;
+      case 'navUp':
+      case 'navDown': {
+        const panel = document.querySelector('.stage .testb');
+        if (panel && cycleFocus(panel, i === 'navDown' ? 1 : -1)) navFocus = true;
+        return true;
+      }
+      case 'cycleLeft':
+      case 'cycleRight':
+        t.rotate(i === 'cycleRight' ? 1 : -1);
+        return true;
+      case 'manage':
+        t.addBuilding();
+        return true;
+      case 'trade':
+        t.removeBuilding();
+        return true;
+      case 'confirm':
+        return clickFocused();
+      default:
+        return true;
+    }
+  }
+
+  /**
    * Keyboard / controller intents. `deviceSeat` is the seat the controller is bound to
    * (null for keyboard and mouse, which always work as a fallback). Returns true when handled.
    */
   export function intent(i: Intent, deviceSeat: number | null = null): boolean {
+    if (benchOpen && !started) {
+      if (i === 'back') {
+        benchPanel?.back();
+        return true;
+      }
+      if (benchRunning) return true;
+      if (navigate(i)) return true;
+      if (i === 'confirm') return clickFocused();
+      return true;
+    }
+    if (screen === 'testboard' && tb && !started) return testBoardIntent(i, tb);
     if (!started || !view || !gs) {
       // Setup screen: navigation and Confirm on the focused control.
       if (navigate(i)) return true;
@@ -389,14 +508,28 @@
 
 <div class="stage" style="transform: translate({offset.x}px, {offset.y}px) scale({scale})">
   {#if !started || !view || !gs}
-    {#if screen === 'menu'}
-      <MainMenu {saves} {oncontinue} onnew={() => (screen = 'setup')} onload={onloadsave} {onimport} onsettings={() => (menuSettings = true)} />
+    {#if screen === 'testboard' && tb}
+      {#if !benchOpen}
+        <TestBoardControls {tb} v={tbV} {boards} detailed={tbDetailed} ondetailed={(on) => (tbDetailed = on)} onbenchmark={() => openBench('testboard')} onexit={exitTestBoard} />
+      {/if}
+    {:else if screen === 'menu'}
+      {#if !benchOpen}
+        <MainMenu {saves} {oncontinue} onnew={() => (screen = 'setup')} onload={onloadsave} {onimport} onsettings={() => (menuSettings = true)} ontestboard={openTestBoard} />
+      {/if}
       {#if menuSettings}
-        <PauseMenu gs={null} {settings} {onsetting} onresume={() => (menuSettings = false)} onforfeit={() => {}} onnewgame={() => {}} {onfullscreen} />
+        <PauseMenu gs={null} {settings} onsetting={setSetting} onresume={() => (menuSettings = false)} onforfeit={() => {}} onnewgame={() => {}} {onfullscreen} onbenchmark={() => openBench('menu')} />
       {/if}
     {:else}
       <Setup {onstart} {input} {pads} {presets} {boards} />
       <button class="menuback" onclick={() => (screen = 'menu')}>‹ Main menu</button>
+    {/if}
+    {#if benchOpen}
+      <BenchmarkPanel bind:this={benchPanel} {perf} onclose={closeBench} onrunning={(on) => (benchRunning = on)} />
+    {/if}
+    {#if benchState && view?.moment}
+      {#key view.moment}
+        <MomentLayer moment={view.moment} gs={benchState} speed={SPEED_FACTOR[controller.speed]} />
+      {/key}
     {/if}
   {:else}
     <PlayerCards players={players(gs)} {cashOverride} {shake} />
@@ -492,17 +625,21 @@
       <PauseMenu
         {gs}
         {settings}
-        {onsetting}
+        onsetting={setSetting}
         onresume={() => setPaused(false)}
         onforfeit={(seat) => { setPaused(false); act({ type: 'forfeit', seat }); }}
         onnewgame={() => { setPaused(false); screen = 'menu'; onnewgame(); }}
         {onfullscreen}
         onsave={() => (savingOpen = true)}
+        onbenchmark={() => {}}
       />
       {#if savingOpen}
         <SavePanel {saves} onsave={onsaveslot} {onexport} onclose={() => (savingOpen = false)} />
       {/if}
     {/if}
+  {/if}
+  {#if perfMode !== 'off'}
+    <PerfOverlay renderer={perf.renderer} mode={perfMode} info={() => `${perf.qualityLabel()} · AO ${settings.ambientOcclusion ? 'on' : 'off'}`} />
   {/if}
 </div>
 

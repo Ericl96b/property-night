@@ -60,6 +60,13 @@ This file is the hand-off log for unattended work. A resumed session reads it fi
   See DECISIONS.md, "Batch 2". Check: `node scripts/cdp.mjs scripts/plans/batch2.mjs .snapshots`.
 - [x] **Batch 3** (owner request, 2026-11-21): themed houses and hotels, one design pair per color group, in the group's board color. See DECISIONS.md, "Batch 3". Check: `node scripts/cdp.mjs scripts/plans/batch3.mjs .snapshots`.
 
+- [x] **Batch 4** (owner request, 2026-11-21):
+  - graphics benchmark (Quick / Standard / Compare settings) with a results screen, recommendations and history
+  - test board sandbox from the main menu
+  - performance overlay (Off / FPS / Detailed)
+
+  See DECISIONS.md, "Batch 4". Checks: `node scripts/cdp.mjs scripts/plans/bench.mjs .snapshots`, `node scripts/cdp.mjs scripts/plans/testboard.mjs .snapshots`, `node scripts/cdp.mjs scripts/plans/perf.mjs .snapshots`. Left for the owner: Compare settings on the TV PC at 4K (Windows at 120 Hz, then 60 Hz) and on the laptop; couch readability of the results; test-board controls on both controllers.
+
 ## Open questions for the owner
 
 None. The four alpha questions were answered on 2026-11-18. The owner has more fixes and additions planned; they will arrive as a separate batch.

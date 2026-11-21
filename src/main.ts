@@ -23,6 +23,13 @@ import { AUTOSAVE_ID, Saves, makeSave, type SaveFile } from './app/saves';
 import { downloadText } from './app/presets';
 import { CLASSIC_RULES } from './engine';
 import { Sound } from './audio/sound';
+import * as THREE from 'three';
+import { BOARD_TOP, tileAt } from './render/layout';
+import { TestBoard } from './bench/testBoard';
+import { BenchHistory } from './bench/history';
+import { runBenchmark } from './bench/benchmark';
+import type { PerfApi } from './bench/perfApi';
+import type { State as GameState } from './engine';
 
 /**
  * PWA (SPEC §2): offline play after the first visit. Production only (the dev server must
@@ -162,12 +169,78 @@ async function boot(): Promise<void> {
     scene.camera.toSide(sideOfTile(controller.state.players[controller.state.turn.seat].position), true);
     scene.renderer.requestRender();
   };
+  // Leave a clean board behind: no tokens, owner discs, stamps, ribbons, locks or buildings.
+  const clearScene = () => {
+    scene.queue.flush();
+    scene.tokens.clear();
+    for (let i = 0; i < 40; i++) {
+      scene.decals.setOwner(i, null);
+      scene.decals.setMortgaged(i, false);
+      scene.decals.setPromise(i, false);
+      scene.decals.setPledged(i, false);
+      scene.buildings.set(i, 0, false);
+    }
+    scene.decals.setHighlight(null);
+    scene.signs.clear();
+    scene.renderer.requestRender();
+  };
+
+  // Batch 4: benchmark and test board. Both draw their own data-only state through the director
+  // and never touch the controller, so no game, save, autosave or Continue is affected.
+  let app!: {
+    intent: (i: Intent, seat?: number | null) => boolean;
+    padLost: (seat: number) => void;
+    padBack: (seat: number) => void;
+    setBenchState: (s: GameState | null) => void;
+    testBoardChanged: () => void;
+  };
+  let testBoard: TestBoard | null = null;
+  let inTestBoard = false;
+  const perf: PerfApi = {
+    renderer: scene.renderer,
+    history: new BenchHistory(kv),
+    run: (mode, onProgress, signal) =>
+      runBenchmark(
+        { scene, director, settings, ensureBoard: (b) => ensureBoard(b, CLASSIC_RULES), setBenchState: (st) => app.setBenchState(st) },
+        mode,
+        onProgress,
+        signal,
+      ),
+    enterTestBoard: () => {
+      testBoard ??= new TestBoard({ scene, director, sound, ensureBoard: (b) => ensureBoard(b, CLASSIC_RULES), onChange: () => app.testBoardChanged() }, CLASSIC_BOARD);
+      clearScene();
+      testBoard.enter();
+      inTestBoard = true;
+      return testBoard;
+    },
+    leaveTestBoard: () => {
+      testBoard?.exit();
+      inTestBoard = false;
+      clearScene();
+    },
+    clearScene,
+    qualityLabel: () => (scene.quality.level === 'high' ? 'High' : 'Low'),
+    setNudgeAnyPad: (on) => (input.nudgeAnyPad = on),
+  };
+
+  // Test board: click a property on the board to select it.
+  const ray = new THREE.Raycaster();
+  const boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -BOARD_TOP);
+  scene.renderer.gl.domElement.addEventListener('pointerdown', (e) => {
+    if (!inTestBoard || !testBoard) return;
+    const ndc = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+    ray.setFromCamera(ndc, scene.camera.camera);
+    const hit = ray.ray.intersectPlane(boardPlane, new THREE.Vector3());
+    const tile = hit ? tileAt(hit.x, hit.z) : null;
+    if (tile !== null) testBoard.select(tile);
+  });
+
   const toggleFullscreen = () => {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void document.documentElement.requestFullscreen();
   };
 
-  const app = mount(App, {
+  app = mount(App, {
     target: overlay,
     props: {
       controller,
@@ -218,21 +291,12 @@ async function boot(): Promise<void> {
       onnewgame: () => {
         input.clearBindings();
         controller.reset();
-        scene.tokens.clear();
-        // Leave a clean board behind: no owner discs, stamps, ribbons, locks or buildings.
-        for (let i = 0; i < 40; i++) {
-          scene.decals.setOwner(i, null);
-          scene.decals.setMortgaged(i, false);
-          scene.decals.setPromise(i, false);
-          scene.decals.setPledged(i, false);
-          scene.buildings.set(i, 0, false);
-        }
-        scene.signs.clear();
-        scene.renderer.requestRender();
+        clearScene();
       },
       onfullscreen: toggleFullscreen,
+      perf,
     },
-  }) as { intent: (i: Intent, seat?: number | null) => boolean; padLost: (seat: number) => void; padBack: (seat: number) => void };
+  }) as typeof app;
 
   startKeyboard({
     intent: (i) => {
@@ -294,7 +358,7 @@ async function boot(): Promise<void> {
     f(s);
     controller.load(s);
   };
-  (window as unknown as { __pn: unknown }).__pn = { scene, controller, director, settings, forceDice, patchState, input, app, saves, sound };
+  (window as unknown as { __pn: unknown }).__pn = { scene, controller, director, settings, forceDice, patchState, input, app, saves, sound, perf, testBoard: () => testBoard };
   scene.renderer.requestRender();
   // Startup budget (SPEC §10.10): navigation start → interactive menu.
   performance.mark('pn-ready');

@@ -66,5 +66,39 @@ export default {
       },
       label: 'fps while the camera turns',
     },
+    {
+      // Batch 4: frame capture must not be what makes a frame slow (recommendation rule 7).
+      // Average main-thread cost of one loop iteration, continuous rendering, capture off / on / off.
+      eval: async () => {
+        const r = window.__pn.scene.renderer;
+        const orig = r.loop;
+        const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+        const measure = async (capture) => {
+          let acc = 0;
+          let n = 0;
+          r.loop = (now) => {
+            const t = performance.now();
+            orig(now);
+            acc += performance.now() - t;
+            n++;
+          };
+          if (capture) r.beginCapture('perf-check');
+          r.setContinuous(true);
+          await sleep(2000);
+          r.setContinuous(false);
+          if (capture) await r.endCapture();
+          await sleep(300);
+          r.loop = orig;
+          return +(acc / Math.max(1, n)).toFixed(3);
+        };
+        const off = await measure(false);
+        const on = await measure(true);
+        const off2 = await measure(false);
+        const base = (off + off2) / 2;
+        const out = { loopMsCaptureOff: off, loopMsCaptureOn: on, loopMsCaptureOffAgain: off2 };
+        return on - base > Math.max(0.25, base * 0.15) ? { error: 'capture adds measurable CPU time', ...out } : out;
+      },
+      label: 'CPU per frame: capture off vs on (expect no measurable difference)',
+    },
   ],
 };

@@ -4,7 +4,7 @@ export const H = `(() => {
     c: () => window.__pn.controller,
     buttons: (sel = '.context button') => [...document.querySelectorAll(sel)].map((b) => b.textContent.trim()),
     click(re, sel = 'button') {
-      const b = [...document.querySelectorAll(sel)].find((x) => re.test(x.textContent) && !x.disabled);
+      const b = [...document.querySelectorAll(sel)].find((x) => re.test(x.textContent.trim()) && !x.disabled);
       if (!b) return false;
       b.click();
       return true;

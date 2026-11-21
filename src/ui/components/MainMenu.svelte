@@ -11,6 +11,7 @@
     onload,
     onimport,
     onsettings,
+    ontestboard,
   }: {
     saves: Saves;
     oncontinue: () => void;
@@ -18,6 +19,7 @@
     onload: (f: SaveFile) => void;
     onimport: (text: string) => string | null;
     onsettings: () => void;
+    ontestboard: () => void;
   } = $props();
 
   let canContinue = $state(false);
@@ -48,6 +50,7 @@
       {#if canContinue}<ActionButton label="Continue" glyph="confirm" primary onclick={oncontinue} />{/if}
       <ActionButton label="New game" glyph={canContinue ? undefined : 'confirm'} primary={!canContinue} onclick={onnew} />
       <ActionButton label="Load game" disabled={!list.length} onclick={() => (loading = true)} />
+      <ActionButton label="Test board" onclick={ontestboard} />
       <ActionButton label="Import save…" onclick={() => fileInput.click()} />
       <ActionButton label="Settings" onclick={onsettings} />
       <input bind:this={fileInput} type="file" accept="application/json,.json" hidden onchange={importFile} />

@@ -105,6 +105,25 @@ export function tileLocalToWorld(f: TileFrame, lx: number, ly: number): [number,
 /** Pseudo-tile for tokens that are *in* jail (inside the jail square, not Just Visiting). */
 export const IN_JAIL = 40;
 
+/** The tile under a board point (world x, z), or null off the board's ring of tiles. */
+export function tileAt(x: number, z: number): number | null {
+  const half = BOARD_SIZE / 2;
+  if (Math.abs(x) > half || Math.abs(z) > half) return null;
+  const inner = half - CORNER_PX * PX;
+  if (Math.abs(x) < inner && Math.abs(z) < inner) return null;
+  let best: number | null = null;
+  let bestD = Infinity;
+  for (let i = 0; i < 40; i++) {
+    const [cx, cz] = tileLocalToWorld(tileFrame(i), 0, 0);
+    const d = (cx - x) ** 2 + (cz - z) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
 /** Where tokens stand on a tile: positions for `n` tokens, fanned out in a small arc. */
 export function tokenSpots(index: number, n: number): [number, number][] {
   if (index === IN_JAIL) {

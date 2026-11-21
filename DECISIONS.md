@@ -218,6 +218,51 @@ These change approved SPEC behavior at the owner's request.
   - With bank loans on, a normal bot in debt could never declare bankruptcy, because a loan it would never take counted as a way out, so the game froze. Normal bots never borrow (SPEC §3), so their borrowing capacity is now 0.
 - **Performance:** worst-case board 93 draw calls (budget 150). Signs and decks cost about 2 fps on this machine's headless browser.
 
+## Batch 4: benchmark, test board, performance overlay (owner request, 2026-11-21)
+
+A way to check how the game runs on the TV PC without playing: a scripted benchmark with a results screen, a no-rules test board, and an optional frame-rate overlay. Spec: `docs/batch4/SPEC-benchmark.md`. Rules, bots, rule defaults and the save format are unchanged; normal play still renders 0 frames when idle.
+
+- **Performance target (SPEC §10.10 changed):** on the TV PC the target is now a steady 120 fps at 3840 × 2160 on High when the display runs at 120 Hz; 60 fps stays the floor. This batch only measures against it; no rendering was changed to chase it.
+- **Measurement:**
+  - A frame is *late* when its interval is over 1.5 refresh periods (it missed a vsync). A phase *holds* a rate when at most 1% of its frames are late (p99 interval ≤ 1.5 periods). The same rule gives the 60 fps reference: frames over 25 ms.
+  - "Unknown" bottleneck (GPU time unavailable): p99 interval over 1.5 periods.
+  - Frame interval is the rAF delta of the render loop, so the first frame after an idle period isn't counted as a long frame.
+  - The ring buffer holds 4,096 frames instead of ≈2,000, so a 12 s phase at 240 Hz fits.
+  - The refresh rate is measured from 60 rAF intervals *before* the benchmark loads the GPU. Measured under load, a GPU-bound run would report a falsely low rate.
+  - Instrumentation only runs while a capture is open or the overlay is on (one boolean check otherwise). `perf.mjs` measures the loop's CPU time with capture off / on / off: 3.57 / 3.23 / 3.51 ms, no measurable difference.
+- **Benchmark scene and phases:**
+  - The worst-case board alternates hotel / 4 houses **street by street within each group**, not group by group. Group by group would show each group's house *or* hotel design, never both.
+  - Phase 1's "light ambient motion" is a slow seeded camera sway (the scene has no idle animation since Batch 3).
+  - Phase 2 turns every 2 s. A turn at Normal speed takes 2.3 s (1.4 s ÷ the 0.6 speed factor), so the next turn starts just before the last one settles.
+  - Phase 3 uses the game's follow zoom (`setFollow` on each group's middle street) with a small nudge sway.
+  - Phase 4 sells street by street within each group's slot, then drops back in with the build bounce. A hotel comes back the way it's built in play: four houses, then the hotel drops in.
+  - Phase 5 feeds the director hand-made `turnStarted` / `diceRolled` / `moved` / `payment` events against the benchmark state, so the real dice physics, hop, camera follow, push-in and payment moment run. The director got `reseed()` so every run throws identical dice. Moments show over the benchmark's own state (App renders the MomentLayer with it).
+  - Phase 6 holds phase 3's costliest close-up still and renders it k times per displayed frame (`Renderer.setRenderMultiplier`). Draw calls are reported per single render.
+  - Before the first capture, one sell fade per group runs uncaptured (warm-up). The first sell in a session compiles the transparent sell shader (≈330 ms here); without the warm-up only the first run would pay for it.
+  - During the run, camera rotation and follow are forced on and reduce motion forced off, then restored. Otherwise the camera path would depend on settings.
+  - The benchmark always uses the Classic board; the board face is regenerated if another preset was last shown.
+- **Sell fades exceed the draw-call budget (existing, from Batch 3; not fixed here):** a full board is 122–128 draw calls at rest. One house sell adds ≈19 temporary draw calls and one hotel sell ≈39, so selling a hotel on a full board reaches ≈167. Each sell also costs a 30–80 ms frame (cloned materials) on the test machine's Iris Xe. The Construction wave shows this, peaking at ≈230–340 calls, so recommendation rule 8 ("a problem in the game") fires on every run. `bench.mjs` fails on ≥ 150 only in the steady phases and reports the wave peak. Fixing it (e.g. one merged fade mesh per finish, or keeping the fade materials alive) is a rendering change for a later batch.
+- **Recommendations:**
+  - Rule 2 (integrated GPU) fires when the renderer string looks integrated *and* a phase misses the display rate. The browser can't know whether a discrete GPU exists, so the wording is conditional.
+  - Rule 5 is folded into 4b when both would fire (same advice).
+  - Rule 6 needs every phase to hold the display rate with ≥ 2× spare (or headroom k ≥ 3).
+  - Measured gains compare p99 GPU ms (or CPU/interval without a timer) in the worst phase.
+- **History:** one `meta` record `benchmarks` with the 10 newest summaries. "Same configuration" for "last run" means the same mode, quality, AO, tone mapping and drawing-buffer size.
+- **Layout:**
+  - The overlay chip sits under the pause-menu button at top centre in every mode: in a game the context panel fills the top-right corner.
+  - The Settings column scrolls (max 760 px) with the new Performance section at the bottom.
+  - The benchmark panel follows the stats panel (1240 px wide for results, same type sizes). Pass/fail tags sit in the 1% low cell, one per target; at 60 Hz only one tag shows.
+  - The test board uses two panels in the player-card and context-panel positions.
+- **Test board controls:**
+  - D-pad left/right selects the previous/next *property* (corners, cards and taxes are skipped: nothing on them can be edited). Up/down steps through both panels' controls in order.
+  - Square/Y (B) adds and Triangle/X (V) removes a building; LB/RB (Q/E) rotate. Mouse clicks on the board select a property.
+  - L1/R1 prompts use the lettered-disc style ("L1"/"R1", "L"/"R" on Nintendo). There is no approved symbol for them.
+  - Any connected pad's right stick nudges the camera in the test board (`InputManager.nudgeAnyPad`); in games only bound pads nudge, as before.
+  - The selected tile gets a thin cream ring (the decal print cream `#FBF6EA`) at the owner-disc spot, so unowned tiles show it too.
+  - The test board starts on Empty with 2 tokens. Camera rotation/follow are forced on while it's open.
+  - It never touches the game controller: `tests/bench/testBoard.test.ts` checks autosave, Continue and `onChange` are untouched.
+- **Overlay:** "FPS" is 1000 ÷ the average frame interval over the last second. Outside the test board it never requests a frame and shows "idle" after 0.5 s without one.
+
 ## Batch 3: themed buildings (owner request, 2026-11-21)
 
 Each color group gets its own house and hotel design, replacing the green and red boxes. The designs were approved in a separate 3D look test; this batch only integrates them. Spec: `docs/batch3/SPEC-buildings.md`.

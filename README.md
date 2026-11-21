@@ -29,6 +29,16 @@ Review URL parameters: `?quality=high|low`, `?seed=N`, `?speed=slow|normal|fast|
 
 Graphics settings (pause menu, independent of Quality): Ambient occlusion (off by default), Brightness 70–130%, Tone mapping Filmic (ACES) / AgX / Neutral.
 
+Performance (Batch 4): **Settings → Performance** has the *Performance overlay* (Off / FPS / Detailed) and **Run benchmark…** (Quick ≈ 20 s, Standard ≈ 60 s, Compare settings ≈ 3 min; results with a verdict, per-phase table and suggestions; Copy results / Export JSON; last 10 results kept). The benchmark is only available from the main menu. **Main menu → Test board** is a no-rules sandbox: presets (Empty, All houses, All hotels, Worst case, One group), and on the selected property Add/Remove building, Owner, Mortgage, Pledge and Close-up.
+
+| Test board | Keyboard | Controller |
+| --- | --- | --- |
+| Previous / next property | ← / → (or click it) | D-pad left / right |
+| Step through the controls | ↑ / ↓, then Space | D-pad up / down, then Confirm |
+| Add / remove a building | B / V | Square / Y, Triangle / X |
+| Rotate to the previous / next side | Q / E | L1 / R1 (L / R) |
+| Leave | Escape | Back |
+
 Review screenshots: [docs/m0/](docs/m0/) (visual prototype), [docs/m2/](docs/m2/), [docs/m3/](docs/m3/), [docs/m4/](docs/m4/), [docs/m5/](docs/m5/), [docs/m6/](docs/m6/), [docs/m7/](docs/m7/), [docs/m8/](docs/m8/), [docs/m9/](docs/m9/), [docs/m10/](docs/m10/), [docs/m11/](docs/m11/).
 
 **Install:** in Chrome or Edge, open the live build and use "Install Property Night" in the address bar (or the browser menu). After the first visit it also works offline. Sound starts after the first key press, click or controller button (browser autoplay rules); volumes are in the pause menu.
@@ -73,6 +83,8 @@ src/
   audio/     WebAudio sound effects and generative music (nothing shipped as files)
   app/       game controller, settings, presets, saves
   storage/   IndexedDB key-value store
+  perf/      frame samples, statistics, verdict and recommendations for the benchmark (pure)
+  bench/     benchmark runner and phases, test-board sandbox, benchmark history
   input/     keyboard + gamepad
   ui/        Svelte overlay (lobby, player cards, context panel, deeds, cards, editors, stats)
 public/      fonts, app icons, web app manifest, service worker (sw.js)

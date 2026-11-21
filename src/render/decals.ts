@@ -187,6 +187,29 @@ export class Decals {
     this.mortgaged.set(tile, g);
   }
 
+  private highlight?: THREE.Mesh;
+
+  /**
+   * Test board selection (Batch 4): a thin cream ring around the owner-disc spot, in the cream
+   * already used for the decal prints. Null hides it.
+   */
+  setHighlight(tile: number | null): void {
+    if (tile === null) {
+      if (this.highlight) this.highlight.visible = false;
+      return;
+    }
+    if (!this.highlight) {
+      const geo = new THREE.RingGeometry(0.0052, 0.0064, 32);
+      geo.rotateX(-Math.PI / 2);
+      this.highlight = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xfbf6ea, transparent: true, opacity: 0.9, depthWrite: false }));
+      this.highlight.name = 'test-board-highlight';
+      this.group.add(this.highlight);
+    }
+    const [x, z] = tileLocalToWorld(tileFrame(tile), 0, OWNER_DISC_LY);
+    this.highlight.position.set(x, BOARD_TOP + 0.0009, z);
+    this.highlight.visible = true;
+  }
+
   /** Pledged to a bank loan (SPEC §7): small padlock at the tile's outer edge. */
   setPledged(tile: number, on: boolean): void {
     if (this.locks.has(tile) === on) return;

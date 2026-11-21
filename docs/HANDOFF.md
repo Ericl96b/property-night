@@ -58,7 +58,7 @@ Gotchas already hit: Svelte 5 treats `$state` as a store if a variable named `st
 
 ## Next steps
 
-No milestones remain. If the owner asks for more work, start from their feedback; keep the standing instructions above (DECISIONS.md for judgement calls, open questions in `docs/PROGRESS.md`, commit → push → green deploy). Useful checks: `scripts/plans/m10.mjs` (lobby/bots/game over), `m11.mjs` (sound unlock, volumes, stats), `perf.mjs` (draw calls, idle, fps), `boot.mjs` (startup marks), `pwa.mjs` (offline on the live build).
+No milestones remain. If the owner asks for more work, start from their feedback; keep the standing instructions above (DECISIONS.md for judgement calls, open questions in `docs/PROGRESS.md`, commit → push → green deploy). Useful checks: `scripts/plans/m10.mjs` (lobby/bots/game over), `m11.mjs` (sound unlock, volumes, stats), `perf.mjs` (draw calls, idle, fps, capture cost), `bench.mjs` (benchmark Quick run + cancel), `testboard.mjs` (test board presets, edits, isolation), `boot.mjs` (startup marks), `pwa.mjs` (offline on the live build).
 
 ## Open questions for the owner
 

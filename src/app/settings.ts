@@ -23,7 +23,11 @@ export interface Settings {
   toneMapping: ToneMappingSetting;
   /** Banknotes fly between the player tabs for every payment, not only big ones. */
   everyPayment: boolean;
+  /** Performance overlay (Batch 4): off by default so normal play is unchanged. */
+  perfOverlay: PerfOverlaySetting;
 }
+
+export type PerfOverlaySetting = 'off' | 'fps' | 'detailed';
 
 export type ToneMappingSetting = 'aces' | 'agx' | 'neutral';
 
@@ -44,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   brightness: 1,
   toneMapping: 'aces',
   everyPayment: true,
+  perfOverlay: 'off',
 };
 
 const KEY = 'property-night.settings.v1';

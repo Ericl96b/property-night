@@ -19,9 +19,9 @@ import type { SymbolName } from '../render/symbols';
 
 export const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 
-export type Glyph = 'confirm' | 'back' | 'manage' | 'trade';
+export type Glyph = 'confirm' | 'back' | 'manage' | 'trade' | 'cycleLeft' | 'cycleRight';
 
-export const GLYPH_SYMBOL: Record<Glyph, SymbolName> = {
+export const GLYPH_SYMBOL: Record<'confirm' | 'back' | 'manage' | 'trade', SymbolName> = {
   confirm: 'button-cross',
   back: 'button-circle',
   manage: 'button-square',
@@ -36,6 +36,9 @@ export type GlyphFamily = 'playstation' | 'nintendo';
  * symbols; X and Y are drawn as lettered discs in the same style.
  */
 export function glyphFor(g: Glyph, family: GlyphFamily = 'playstation', swap = false): { symbol?: SymbolName; letter?: string } {
+  // Shoulder buttons have no approved symbol: lettered discs in the same style (Batch 4).
+  if (g === 'cycleLeft') return { letter: family === 'playstation' ? 'L1' : 'L' };
+  if (g === 'cycleRight') return { letter: family === 'playstation' ? 'R1' : 'R' };
   if (family === 'playstation') return { symbol: GLYPH_SYMBOL[g] };
   switch (g) {
     case 'confirm':

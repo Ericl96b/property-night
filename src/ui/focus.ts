@@ -46,3 +46,14 @@ export function moveFocus(container: Element, dir: Dir): HTMLElement | null {
   if (next) (next as HTMLElement & { focus(o?: { focusVisible?: boolean }): void }).focus({ focusVisible: true } as FocusOptions);
   return next ?? null;
 }
+
+/** Step focus through `container`'s controls in document order, wrapping (test board, Batch 4). */
+export function cycleFocus(container: Element, step: 1 | -1): HTMLElement | null {
+  const els = focusables(container);
+  if (!els.length) return null;
+  const active = document.activeElement as HTMLElement | null;
+  const i = active ? els.indexOf(active) : -1;
+  const next = els[i < 0 ? (step > 0 ? 0 : els.length - 1) : (i + step + els.length) % els.length];
+  (next as HTMLElement & { focus(o?: { focusVisible?: boolean }): void }).focus({ focusVisible: true } as FocusOptions);
+  return next;
+}

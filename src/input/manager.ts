@@ -172,6 +172,8 @@ export class InputManager {
   bindings = new Map<string, number>();
   remaps = new Map<string, Mapping>();
   swapNintendo = false;
+  /** Test board (Batch 4): any pad's right stick nudges the camera, bound or not. */
+  nudgeAnyPad = false;
   onIntent: (e: IntentEvent) => void = () => {};
   onPadsChanged: () => void = () => {};
   /** Any button on any pad (lobby join, remap capture). */
@@ -301,7 +303,7 @@ export class InputManager {
         continue;
       }
       this.pollPad(id, info, pad, mapping, now);
-      if (this.bindings.has(id)) {
+      if (this.bindings.has(id) || this.nudgeAnyPad) {
         const ax = pad.axes[2] ?? 0;
         const ay = pad.axes[3] ?? 0;
         if (Math.abs(ax) > 0.2) nx = ax;

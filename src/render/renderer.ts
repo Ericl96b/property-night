@@ -8,6 +8,9 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import type { QualityProfile } from './quality';
+import { SampleRing, type FrameSample } from '../perf/samples';
+import { GpuTimer } from '../perf/gpuTimer';
+import { estimateRefresh } from '../perf/refresh';
 
 /** Graphics options outside the Quality preset (owner request, 2026-11-18). */
 export interface GraphicsOptions {
@@ -43,6 +46,16 @@ export class Renderer {
   private frameTimes: number[] = [];
   onFrame?: () => void;
   lastRenderInfo = { calls: 0, triangles: 0 };
+
+  // Frame timing (Batch 4, SPEC-benchmark §2.2). Recorded only while a capture runs or the
+  // performance overlay is on; otherwise the loop does exactly what it did before.
+  private ring = new SampleRing(4096);
+  private captures = 0;
+  private overlayOn = false;
+  private continuous = false;
+  private multiplier = 1;
+  private timer?: GpuTimer;
+  private lastRenderAt = 0;
 
   constructor(container: HTMLElement, camera: THREE.PerspectiveCamera) {
     this.camera = camera;
@@ -154,19 +167,129 @@ export class Renderer {
   }
 
   private loop = (now: number): void => {
-    const dt = Math.min(0.1, (now - this.last) / 1000);
+    const inst = this.captures > 0 || this.overlayOn;
+    const t0 = inst ? performance.now() : 0;
+    const interval = now - this.last;
+    const dt = Math.min(0.1, interval / 1000);
     this.last = now;
     let active = false;
     for (const t of this.tickers) if (t(dt, now)) active = true;
-    if (active || this.dirty) {
+    const render = active || this.dirty || this.continuous;
+    if (render) {
       this.dirty = false;
       this.gl.info.reset();
-      this.composer.render(dt);
-      this.lastRenderInfo = { calls: this.gl.info.render.calls, triangles: this.gl.info.render.triangles };
+      const timer = inst ? this.gpuTimer : undefined;
+      const id = this.ring.nextId;
+      timer?.begin(id);
+      const k = this.multiplier;
+      for (let i = 0; i < k; i++) this.composer.render(dt);
+      timer?.end();
+      // Per displayed frame, one render's worth (the headroom phase renders k times).
+      const calls = Math.round(this.gl.info.render.calls / k);
+      const triangles = Math.round(this.gl.info.render.triangles / k);
+      this.lastRenderInfo = { calls, triangles };
       this.frameTimes.push(now);
+      this.lastRenderAt = now;
+      if (inst) this.ring.push(now, interval, performance.now() - t0, calls, triangles);
       this.onFrame?.();
     }
-    if (active || this.dirty) requestAnimationFrame(this.loop);
+    if (inst) this.timer?.poll((fid, ms) => this.ring.setGpu(fid, ms));
+    if (render || this.continuous) requestAnimationFrame(this.loop);
     else this.running = false;
   };
+
+  // --- instrumentation ------------------------------------------------------------------------
+
+  /** The GPU timer (created on first use). */
+  get gpuTimer(): GpuTimer {
+    this.timer ??= new GpuTimer(this.gl.getContext());
+    return this.timer;
+  }
+
+  /** Is GPU time measurable in this browser? */
+  get gpuTimerAvailable(): boolean {
+    return this.gpuTimer.available;
+  }
+
+  /** Overlay on/off: records samples for `recent()`. */
+  setOverlay(on: boolean): void {
+    this.overlayOn = on;
+  }
+
+  /** Render every animation frame (benchmark, test board in Detailed). Off restores render-on-demand. */
+  setContinuous(on: boolean): void {
+    this.continuous = on;
+    if (on) this.wake();
+    else this.requestRender();
+  }
+
+  get isContinuous(): boolean {
+    return this.continuous;
+  }
+
+  /** Headroom phase only: render the frame k times per displayed frame. */
+  setRenderMultiplier(k: number): void {
+    this.multiplier = Math.max(1, Math.floor(k));
+  }
+
+  /** rAF time of the last rendered frame (0 before the first). */
+  get lastFrameAt(): number {
+    return this.lastRenderAt;
+  }
+
+  get drawingBufferSize(): { width: number; height: number } {
+    const v = this.gl.getDrawingBufferSize(new THREE.Vector2());
+    return { width: v.x, height: v.y };
+  }
+
+  /** Samples from the last `ms` milliseconds (overlay). */
+  recent(ms: number): FrameSample[] {
+    return this.ring.since(performance.now() - ms);
+  }
+
+  private captureFrom = 0;
+  captureLabel = '';
+
+  beginCapture(label: string): void {
+    this.captureLabel = label;
+    this.captureFrom = this.ring.nextId;
+    this.captures++;
+  }
+
+  /**
+   * End the capture and return its samples. Waits up to `settleFrames` animation frames for
+   * late GPU timer results (the loop keeps polling while the capture is open).
+   */
+  async endCapture(settleFrames = 8): Promise<FrameSample[]> {
+    const from = this.captureFrom;
+    const to = this.ring.nextId;
+    if (this.timer?.available) {
+      for (let i = 0; i < settleFrames && this.timer.pendingCount > 0; i++) {
+        this.requestRender();
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+    }
+    this.captures = Math.max(0, this.captures - 1);
+    return this.ring.range(from, to);
+  }
+
+  /** Drop any open captures (a cancelled benchmark); instrumentation stops unless the overlay is on. */
+  resetCaptures(): void {
+    this.captures = 0;
+  }
+
+  /** Measure the display refresh rate from rAF intervals (no rendering needed). */
+  measureRefresh(frames = 60): Promise<{ hz: number; raw: number }> {
+    return new Promise((resolve) => {
+      const ints: number[] = [];
+      let prev = 0;
+      const step = (t: number) => {
+        if (prev) ints.push(t - prev);
+        prev = t;
+        if (ints.length >= frames) resolve(estimateRefresh(ints));
+        else requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }
 }

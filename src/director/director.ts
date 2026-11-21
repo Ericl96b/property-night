@@ -88,6 +88,11 @@ export class Director implements DirectorLike {
     return this.scene.queue.busy;
   }
 
+  /** Restart the cosmetic dice RNG (the benchmark replays identical throws). */
+  reseed(seed: number): void {
+    this.cosmetic = new Rng(seed ^ 0x5bd1e995);
+  }
+
   private get speed(): number {
     return this.scene.queue.factor;
   }

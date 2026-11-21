@@ -14,6 +14,7 @@
     onnewgame,
     onfullscreen,
     onsave,
+    onbenchmark,
   }: {
     gs: State | null;
     settings: Settings;
@@ -23,6 +24,8 @@
     onnewgame: () => void;
     onfullscreen: () => void;
     onsave?: () => void;
+    /** Settings → Performance → Run benchmark… (disabled during a game). */
+    onbenchmark?: () => void;
   } = $props();
 
   const VOLUMES: { key: 'volumeMaster' | 'volumeMusic' | 'volumeEffects'; label: string }[] = [
@@ -109,6 +112,14 @@
         <label>…or % of the payer's cash
           <input type="number" min="0" max="100" step="5" value={settings.bigPaymentPercent} onchange={(e) => onsetting({ bigPaymentPercent: Math.min(100, Math.max(0, Number((e.currentTarget as HTMLInputElement).value) || 0)) })} />
         </label>
+        <div class="section">Performance</div>
+        <label>Performance overlay
+          <select value={settings.perfOverlay} onchange={(e) => onsetting({ perfOverlay: (e.currentTarget as HTMLSelectElement).value as Settings['perfOverlay'] })}>
+            <option value="off">Off</option><option value="fps">FPS</option><option value="detailed">Detailed</option>
+          </select>
+        </label>
+        <ActionButton label="Run benchmark…" disabled={!!gs || !onbenchmark} onclick={() => onbenchmark?.()} />
+        {#if gs}<div class="note">Quit to menu to run the benchmark.</div>{/if}
       </div>
     </div>
   {/if}
@@ -151,6 +162,24 @@
     gap: 12px;
     font: 600 17px/1.2 'Source Sans 3', sans-serif;
     min-height: 44px;
+  }
+  .settings {
+    max-height: 760px;
+    overflow-y: auto;
+    padding-right: 8px;
+  }
+  .section {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1.5px solid rgba(43, 33, 25, 0.2);
+    font: 700 13px 'Source Sans 3', sans-serif;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .note {
+    font: 600 15px/1.3 'Source Sans 3', sans-serif;
+    color: var(--ink-2);
   }
   .settings .chk {
     justify-content: flex-start;
