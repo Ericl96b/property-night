@@ -5,7 +5,7 @@
   import type { State, TradeOffer } from '../../engine';
   import ActionButton from './ActionButton.svelte';
   import { money } from '../present';
-  import { emptyOffer, offerProblem, partners, promiseTiles, promiseText, summarize, tradeTiles } from '../trade';
+  import { dealSentences, emptyOffer, offerProblem, partners, tradeTiles } from '../trade';
 
   let {
     gs,
@@ -33,13 +33,12 @@
 
   const others = $derived(partners(gs, seat));
   let offer = $state<TradeOffer>(initial ? $state.snapshot(initial) : emptyOffer(seat, partners(gs, seat)[0] ?? 0));
-  let promiseDraft = $state({ promiser: -1, tile: -1, turns: 3 });
 
   const mine = $derived(tradeTiles(gs, offer.from));
   const theirs = $derived(tradeTiles(gs, offer.to));
   const problem = $derived(mode === 'compose' ? offerProblem(gs, offer) : null);
   const live = $derived(gs.trade);
-  const sum = $derived(live ? summarize(gs, live, seat) : null);
+  const sum = $derived(live ? { lines: dealSentences(gs, live, mode === 'respond' ? seat : null) } : null);
 
   function setPartner(to: number) {
     offer = emptyOffer(offer.from, to);
@@ -49,7 +48,6 @@
     const i = list.indexOf(tile);
     if (i >= 0) list.splice(i, 1);
     else list.push(tile);
-    offer.promises = offer.promises.filter((p) => promiseTiles(gs, offer, p.from).includes(p.tileId));
   }
   function cash(side: 'give' | 'get', delta: number) {
     const max = gs.players[side === 'give' ? offer.from : offer.to].cash;
@@ -58,14 +56,6 @@
   function cards(side: 'give' | 'get', delta: number) {
     const max = gs.players[side === 'give' ? offer.from : offer.to].gojf.length;
     offer[side].gojf = Math.max(0, Math.min(max, offer[side].gojf + delta));
-  }
-  const promiserTiles = $derived(promiseDraft.promiser >= 0 ? promiseTiles(gs, offer, promiseDraft.promiser) : []);
-  function addPromise() {
-    const from = promiseDraft.promiser;
-    if (from < 0 || promiseDraft.tile < 0) return;
-    const to = from === offer.from ? offer.to : offer.from;
-    offer.promises.push({ kind: 'rentFree', from, to, tileId: promiseDraft.tile, turnsLeft: Math.max(1, Math.min(99, promiseDraft.turns)) });
-    promiseDraft = { promiser: -1, tile: -1, turns: 3 };
   }
 </script>
 
@@ -117,28 +107,6 @@
         </div>
       {/each}
     </div>
-    {#if gs.rules.promisesAllowed}
-      <div class="promises">
-        <div class="ct">Promises</div>
-        {#each offer.promises as p, i}
-          <div class="pline">{promiseText(gs, p)} <button class="link" onclick={() => offer.promises.splice(i, 1)}>Remove</button></div>
-        {/each}
-        <div class="padd">
-          <select bind:value={promiseDraft.promiser} aria-label="Who promises">
-            <option value={-1}>Rent-free promise from…</option>
-            <option value={offer.from}>{gs.seats[offer.from].name}</option>
-            <option value={offer.to}>{gs.seats[offer.to].name}</option>
-          </select>
-          <select bind:value={promiseDraft.tile} disabled={promiseDraft.promiser < 0} aria-label="On which property">
-            <option value={-1}>on property…</option>
-            {#each promiserTiles as t}<option value={t}>{gs.board.tiles[t].name}</option>{/each}
-          </select>
-          <input type="number" min="1" max="99" bind:value={promiseDraft.turns} aria-label="For how many turns" />
-          <span>turns</span>
-          <button class="link" disabled={promiseDraft.tile < 0} onclick={addPromise}>Add</button>
-        </div>
-      </div>
-    {/if}
     {#if problem}<div class="problem">{problem}</div>{/if}
     <div class="foot">
       <ActionButton label={counter ? 'Send counter' : 'Propose'} glyph="confirm" primary disabled={!!problem} onclick={() => onsubmit?.($state.snapshot(offer))} />
@@ -148,24 +116,9 @@
     <div class="head">
       <div class="eyebrow">{mode === 'respond' ? `Trade offer from ${gs.seats[live.from].name}` : `Waiting for ${gs.seats[live.to].name}`}</div>
     </div>
-    <div class="cols">
-      <div class="col">
-        <div class="ct">{mode === 'respond' ? 'You get' : `${gs.seats[seat].name} gets`}</div>
-        {#each sum.gets as l}<div class="line">{l}</div>{/each}
-        {#if !sum.gets.length}<div class="none">Nothing</div>{/if}
-      </div>
-      <div class="col">
-        <div class="ct">{mode === 'respond' ? 'You give' : `${gs.seats[seat].name} gives`}</div>
-        {#each sum.gives as l}<div class="line">{l}</div>{/each}
-        {#if !sum.gives.length}<div class="none">Nothing</div>{/if}
-      </div>
+    <div class="promises">
+      {#each sum.lines as l}<div class="pline">{l}</div>{/each}
     </div>
-    {#if sum.promises.length}
-      <div class="promises">
-        <div class="ct">Promises</div>
-        {#each sum.promises as p}<div class="pline">{p}</div>{/each}
-      </div>
-    {/if}
     <div class="foot" class:three={mode === 'respond'}>
       {#if mode === 'respond'}
         <ActionButton label="Accept" glyph="confirm" primary onclick={() => onaccept?.()} />

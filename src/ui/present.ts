@@ -22,7 +22,7 @@ import type { SymbolName } from '../render/symbols';
 
 export const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 
-export type Glyph = 'confirm' | 'back' | 'manage' | 'trade' | 'cycleLeft' | 'cycleRight' | 'peek' | 'nudge';
+export type Glyph = 'confirm' | 'back' | 'manage' | 'trade' | 'cycleLeft' | 'cycleRight' | 'peek' | 'nudge' | 'dpad' | 'dpadLR' | 'dpadUD';
 
 export const GLYPH_SYMBOL: Record<'confirm' | 'back' | 'manage' | 'trade', SymbolName> = {
   confirm: 'button-cross',
@@ -45,6 +45,10 @@ export function glyphFor(g: Glyph, family: GlyphFamily = 'playstation', swap = f
   // Stage 2: hold the right trigger to peek at the board; the right stick nudges / orbits.
   if (g === 'peek') return { letter: family === 'playstation' ? 'R2' : 'ZR' };
   if (g === 'nudge') return { letter: 'RS' };
+  // Stage 3 §8: d-pad prompts, brass-coin style like the face buttons.
+  if (g === 'dpad') return { symbol: 'button-dpad' };
+  if (g === 'dpadLR') return { symbol: 'button-dpad-lr' };
+  if (g === 'dpadUD') return { symbol: 'button-dpad-ud' };
   if (family === 'playstation') return { symbol: GLYPH_SYMBOL[g] };
   switch (g) {
     case 'confirm':

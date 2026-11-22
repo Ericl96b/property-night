@@ -61,6 +61,15 @@ async function boot(): Promise<void> {
   root.append(splash);
 
   const params = new URLSearchParams(location.search);
+  if (params.has('cards')) {
+    // Stage 3 card sheet (dev only): every card kind, size and slot state.
+    const { default: CardSheet } = await import('./ui/cards/CardSheet.svelte');
+    root.textContent = '';
+    document.body.style.overflow = 'auto';
+    mount(CardSheet, { target: root });
+    (document.querySelector('[data-autofocus]') as HTMLElement | null)?.focus();
+    return;
+  }
   const settings: Settings = loadSettings();
   const q = params.get('quality');
   if (q === 'high' || q === 'low' || q === 'auto') settings.quality = q as QualitySetting;
