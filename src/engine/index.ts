@@ -5,6 +5,7 @@ export { newGame, cloneState, sidesFor, type NewGameConfig, type SeatConfig } fr
 export { checkInvariants } from './invariants';
 export { validateOffer, tradeTileBlocker } from './trade';
 export * from './loans';
+export * from './promises';
 export { CLASSIC_RULES, type Rules } from './rules';
 export { CLASSIC_CHANCE, CLASSIC_CHEST, cardText, effectSummary, type Card, type CardEffect, type DeckId } from './cards';
 export * from './queries';

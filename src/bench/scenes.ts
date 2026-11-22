@@ -5,11 +5,12 @@ import { CLASSIC_BOARD, type BoardData, type GroupId } from '../data/classicBoar
 import { newGame, type State } from '../engine';
 import { groupTiles } from '../engine/queries';
 import { PLAYER_COLORS } from '../ui/theme';
+import { COLOR_GROUP_ORDER } from '../engine/promises';
 
 export type PresetId = 'empty' | 'allHouses' | 'allHotels' | 'worstCase' | 'oneGroup';
 export type TokenCount = 0 | 2 | 6;
 
-export const GROUP_ORDER: GroupId[] = ['brown', 'lightBlue', 'yellow', 'orange', 'red', 'pink', 'green', 'darkBlue'];
+export const GROUP_ORDER: GroupId[] = COLOR_GROUP_ORDER;
 // Seat 2 is the Gummy Bear so the 2-token view compares it directly with the teacup (Stage 1 §5).
 export const SANDBOX_TOKENS = ['teacup', 'gummy', 'bicycle', 'cat', 'rocket', 'crown'];
 /** Where tokens stand: one per side, two more, the sixth in jail. */
@@ -95,7 +96,7 @@ function worstCase(s: State): void {
   }
   const promiseTile = rails[3] ?? priced(s)[0];
   const from = s.tiles[promiseTile].owner!;
-  s.promises.push({ id: s.nextPromiseId++, kind: 'rentFree', from, to: (from + 1) % 6, tileId: promiseTile, turnsLeft: 3 });
+  s.promises.push({ id: s.nextPromiseId++, kind: 'rentFree', from, to: (from + 1) % 6, group: 'railroad', total: 3, left: 3 });
 }
 
 // --- test-board edits (no rules: even building, sets and bank supply are ignored) -------------

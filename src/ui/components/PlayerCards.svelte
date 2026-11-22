@@ -25,7 +25,7 @@
             {p.properties} deed{p.properties === 1 ? '' : 's'}{#if p.houses} · {p.houses} house{p.houses === 1 ? '' : 's'}{/if}{#if p.hotels} · {p.hotels} hotel{p.hotels === 1 ? '' : 's'}{/if}
             {#if p.inJail} · <b class="jail">In jail</b>{/if}{#if p.jailCards} · {p.jailCards} jail card{p.jailCards === 1 ? '' : 's'}{/if}
           {/if}
-          {#each p.promises as pr}<div class="promise">◆ {pr}</div>{/each}
+          {#each p.promises as pr}<div class="promise" class:nobuild={pr.kind === 'noBuild'}><i style="background:{pr.color}"></i>{pr.text}</div>{/each}
         </div>
       </div>
       <div class="cash">{p.backed ? '∞' : p.leftTable ? '—' : money(cashOverride ? cashOverride[p.seat] : p.cash)}</div>
@@ -127,7 +127,21 @@
     color: var(--oxblood);
   }
   .promise {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     color: var(--forest);
+    font-weight: 600;
+  }
+  .promise.nobuild {
+    color: var(--oxblood);
+  }
+  .promise i {
+    flex: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    box-shadow: inset 0 0 0 1px rgba(43, 33, 25, 0.35);
   }
   .cash {
     font: 700 22px/1 'Fraunces', serif;

@@ -2,6 +2,7 @@
 // each side. Properties in a color set that has buildings cannot be traded. Cash is allowed;
 // player-to-player loans are not.
 import { groupHasBuildings, isBankBot, isOwnable } from './queries';
+import { isColorGroup, isPromiseGroup, PROMISE_LIMITS, promisesLock, samePromise, tilesInPromiseGroup } from './promises';
 import type { State, TradeOffer, TradeSide } from './types';
 
 /** Why a tile cannot be traded by its owner, or null. */
@@ -39,15 +40,27 @@ export function validateOffer(s: State, o: TradeOffer): string | null {
   const b = checkSide(s, o.to, o.get, 'their side');
   if (b) return b;
   if (o.promises.length) {
-    if (!s.rules.promisesAllowed) return 'promises are off';
-    for (const p of o.promises) {
-      if (p.kind !== 'rentFree') return 'unknown promise';
-      if (!Number.isInteger(p.turnsLeft) || p.turnsLeft < 1 || p.turnsLeft > 99) return 'promise length must be 1–99 turns';
-      const pair = [o.from, o.to];
+    // Bot lock / rules (Stage 3 §6): "no promises or loan terms in trades".
+    if (promisesLock(s)) return 'promises are off';
+    const pair = [o.from, o.to];
+    for (let i = 0; i < o.promises.length; i++) {
+      const p = o.promises[i];
+      if (p.kind !== 'rentFree' && p.kind !== 'noBuild') return 'unknown promise';
       if (!pair.includes(p.from) || !pair.includes(p.to) || p.from === p.to) return 'promises are between the two traders';
-      // After the trade, the promiser must own the tile.
-      const ownerAfter = o.give.tiles.includes(p.tileId) ? o.to : o.get.tiles.includes(p.tileId) ? o.from : s.tiles[p.tileId].owner;
-      if (ownerAfter !== p.from) return 'a rent-free promise must be on a property the promiser will own';
+      if (!isPromiseGroup(p.group)) return 'unknown group';
+      if (p.kind === 'noBuild' && !isColorGroup(p.group)) return 'No Building covers color sets only';
+      const max = PROMISE_LIMITS[p.kind];
+      const unit = p.kind === 'rentFree' ? 'landings' : 'rounds';
+      if (!Number.isInteger(p.left) || p.left < 1 || p.left > max) return `promise length must be 1–${max} ${unit}`;
+      if (p.total !== p.left) return 'bad promise count';
+      if (o.promises.findIndex((q) => samePromise(q, p)) !== i) return 'the same promise is in the offer twice';
+      if (p.kind === 'rentFree') {
+        // After the trade, the promiser must own at least one tile in the group.
+        const ownerAfter = (t: number) => (o.give.tiles.includes(t) ? o.to : o.get.tiles.includes(t) ? o.from : s.tiles[t].owner);
+        if (!tilesInPromiseGroup(s.board, p.group).some((t) => ownerAfter(t) === p.from)) {
+          return 'a rent-free promise needs the promiser to own a property in that group';
+        }
+      }
     }
   }
   return null;

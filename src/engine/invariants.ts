@@ -1,6 +1,7 @@
 // State invariants checked by tests and the headless simulator (SPEC §15).
 import { groupTiles } from './queries';
 import type { State } from './types';
+import { isColorGroup, isPromiseGroup, samePromise } from './promises';
 
 export function checkInvariants(s: State): string[] {
   const errors: string[] = [];
@@ -78,9 +79,11 @@ export function checkInvariants(s: State): string[] {
       }
     }
   });
-  for (const pr of s.promises) {
-    if (s.tiles[pr.tileId].owner !== pr.from) errors.push(`promise ${pr.id} survives an owner change`);
-    if (pr.turnsLeft <= 0) errors.push(`promise ${pr.id} expired but kept`);
-  }
+  s.promises.forEach((pr, k) => {
+    if (!(pr.left >= 1 && pr.left <= pr.total)) errors.push(`promise ${pr.id} count ${pr.left}/${pr.total} out of range`);
+    if (!isPromiseGroup(pr.group)) errors.push(`promise ${pr.id} has unknown group ${pr.group}`);
+    if (pr.kind === 'noBuild' && (!isColorGroup(pr.group) || pr.anchor === undefined)) errors.push(`noBuild promise ${pr.id} needs a color set and an anchor`);
+    if (s.promises.findIndex((q) => samePromise(q, pr)) !== k) errors.push(`promise ${pr.id} duplicates another`);
+  });
   return errors;
 }

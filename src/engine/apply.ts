@@ -23,6 +23,7 @@ import {
 } from './queries';
 import { cloneState } from './state';
 import { validateOffer } from './trade';
+import { noBuildPromise, rentFreePromise, samePromise } from './promises';
 import { borrowCapacity, installment, loanBlocker, seizureValue } from './loans';
 import { HISTORY_MAX } from './state';
 import { EngineError, SPEED_BUS, SPEED_MR, type Action, type ApplyResult, type Creditor, type GameEvent, type State, type TradeOffer } from './types';
@@ -184,11 +185,19 @@ function landOn(c: Ctx, seat: number, tile: number, mods: RentMods = {}): void {
     const owner = s.players[ts.owner];
     if (owner.bankrupt) return;
     if (owner.jail && !s.rules.rentInJail) return;
-    if (s.promises.some((p) => p.kind === 'rentFree' && p.tileId === tile && p.to === seat && p.from === ts.owner)) {
-      log(c, seat, `${name(c, seat)} owes no rent on ${t.name} (promise)`);
+    const rent = rentFor(s, tile, diceTotal(c), mods);
+    // Rent-free promise (Stage 3 §5.1): only a landing that would owe rent uses one up.
+    const promise = rent > 0 ? rentFreePromise(s, seat, ts.owner, tile) : undefined;
+    if (promise) {
+      promise.left--;
+      c.ev.push({ type: 'rentWaived', seat, owner: ts.owner, tile, rent, promise: { ...promise } });
+      log(c, seat, `${name(c, seat)} owes no rent on ${t.name}: rent-free (${name(c, ts.owner)}'s voucher) · ${promise.left} left`);
+      if (promise.left <= 0) {
+        s.promises = s.promises.filter((p) => p !== promise);
+        c.ev.push({ type: 'promiseEnded', promise: { ...promise }, reason: 'expired' });
+      }
       return;
     }
-    const rent = rentFor(s, tile, diceTotal(c), mods);
     addDebt(c, seat, ts.owner, rent, `rent on ${t.name}`, { tile, rent: true });
     return;
   }
@@ -430,6 +439,7 @@ function buildableTile(s: State, seat: number, kind: 'house' | 'hotel'): number 
     if (!s.rules.buildWithMortgagedInSet && g.some((i) => s.tiles[i].mortgaged)) continue;
     if (s.rules.evenBuilding && b > Math.min(...g.map((i) => s.tiles[i].buildings))) continue;
     if (s.players[seat].cash < (t.houseCost ?? 0)) continue;
+    if (noBuildPromise(s, seat, t.index)) continue;
     const gain = t.rents![b + 1] - t.rents![b];
     if (gain > bestRent) {
       bestRent = gain;
@@ -517,7 +527,7 @@ function endBuildingAuction(c: Ctx, a: NonNullable<State['auction']>): void {
   // Build where the winner wanted, or anywhere still legal for them.
   const wanted = a.buildFor?.[w];
   const stillOk = wanted !== undefined && buildableTile({ ...s, players: s.players.map((p, i) => (i === w ? { ...p, cash: Infinity } : p)) }, w, kind) !== null;
-  const target = stillOk ? wanted! : null;
+  const target = stillOk && !noBuildPromise(s, w, wanted!) ? wanted! : null;
   const supplyOk = kind === 'hotel' ? s.bank.hotels > 0 : s.bank.houses > 0;
   if (target === null || !supplyOk) {
     log(c, w, `${name(c, w)} won the ${kind} but can no longer place it; no charge`);
@@ -654,13 +664,29 @@ function checkWin(c: Ctx): boolean {
 
 // ---- trades and promises (SPEC §6) -------------------------------------------------------------
 
-/** Promises are void once the tile changes owner (or either side is out). */
+/** Next seat still in the game after `seat` in turn order (seat order), or `seat` itself. */
+function nextLiveSeat(s: State, seat: number): number {
+  const n = s.players.length;
+  for (let k = 1; k <= n; k++) {
+    const i = (seat + k) % n;
+    if (!s.players[i].bankrupt) return i;
+  }
+  return seat;
+}
+
+/**
+ * Promises end when either party is out (bankrupt or left the table). Owner changes don't void
+ * them (Stage 3 §5.1). A noBuild anchor that goes out moves to the next live seat (§5.2).
+ */
 function voidPromises(c: Ctx): void {
   const s = c.s;
-  const keep = s.promises.filter((p) => s.tiles[p.tileId].owner === p.from && !s.players[p.from].bankrupt && !s.players[p.to].bankrupt);
-  if (keep.length === s.promises.length) return;
-  for (const p of s.promises) if (!keep.includes(p)) c.ev.push({ type: 'promiseEnded', promise: { ...p }, reason: 'void' });
-  s.promises = keep;
+  const out = (seat: number) => s.players[seat].bankrupt || !!s.players[seat].leftTable;
+  const keep = s.promises.filter((p) => !out(p.from) && !out(p.to));
+  if (keep.length !== s.promises.length) {
+    for (const p of s.promises) if (!keep.includes(p)) c.ev.push({ type: 'promiseEnded', promise: { ...p }, reason: 'void' });
+    s.promises = keep;
+  }
+  for (const p of s.promises) if (p.anchor !== undefined && out(p.anchor)) p.anchor = nextLiveSeat(s, p.anchor);
 }
 
 function executeTrade(c: Ctx, o: TradeOffer): void {
@@ -684,7 +710,15 @@ function executeTrade(c: Ctx, o: TradeOffer): void {
   };
   moveSide(o.from, o.to, o.give);
   moveSide(o.to, o.from, o.get);
-  for (const p of o.promises) s.promises.push({ ...p, id: s.nextPromiseId++ });
+  for (const p of o.promises) {
+    const same = s.promises.find((q) => samePromise(q, p));
+    if (same) {
+      same.left += p.left;
+      same.total += p.total;
+    } else {
+      s.promises.push({ ...p, id: s.nextPromiseId++, ...(p.kind === 'noBuild' ? { anchor: s.turn.seat } : {}) });
+    }
+  }
   c.ev.push({ type: 'tradeAccepted', offer: o });
   log(c, o.to, `${name(c, o.to)} accepted a trade with ${name(c, o.from)}`);
 }
@@ -695,9 +729,6 @@ function nextTurn(c: Ctx): void {
   const s = c.s;
   const ended = s.turn.seat;
   c.ev.push({ type: 'turnEnded', seat: ended });
-  for (const p of s.promises) if (p.to === ended) p.turnsLeft--;
-  for (const p of s.promises.filter((x) => x.turnsLeft <= 0)) c.ev.push({ type: 'promiseEnded', promise: { ...p }, reason: 'expired' });
-  s.promises = s.promises.filter((p) => p.turnsLeft > 0);
   const n = s.players.length;
   let next = s.turn.seat;
   for (let k = 1; k <= n; k++) {
@@ -711,6 +742,10 @@ function nextTurn(c: Ctx): void {
   s.turnNumber++;
   s.phase = 'preRoll';
   recordCash(c);
+  // No Building rounds (Stage 3 §5.2): one round ends each time the anchor seat starts a turn.
+  for (const p of s.promises) if (p.kind === 'noBuild' && p.anchor === next) p.left--;
+  for (const p of s.promises.filter((x) => x.left <= 0)) c.ev.push({ type: 'promiseEnded', promise: { ...p }, reason: 'expired' });
+  s.promises = s.promises.filter((p) => p.left > 0);
   c.ev.push({ type: 'turnStarted', seat: next });
 }
 

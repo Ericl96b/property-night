@@ -8,11 +8,12 @@ import type { BoardData, GroupId } from '../data/classicBoard';
 import { type FinishName, type GameBuildingAssets, buildGameAssets } from './buildingModels.js';
 import { bandBox } from './framing';
 import { BAND_CENTER_LY, BOARD_TOP, houseSlotLX, tileFrame, tileLocalToWorld, tileYaw } from './layout';
+import { COLOR_GROUP_ORDER } from '../engine/promises';
 
 /** Board units per model unit, uniform for houses and hotels (Batch 3 spec §5). */
 export const BUILDING_SCALE = 0.016;
 
-const GROUP_IDS: GroupId[] = ['brown', 'lightBlue', 'yellow', 'orange', 'red', 'pink', 'green', 'darkBlue'];
+const GROUP_IDS: GroupId[] = COLOR_GROUP_ORDER;
 
 export type BuildingKind = 'house' | 'hotel';
 

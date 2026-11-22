@@ -1,11 +1,12 @@
 // Save and resume (SPEC §9, §12): autosave after every action, up to 10 named slots,
 // export/import JSON. Format: { version, createdAt, rulesPreset (copy), boardPreset (copy),
 // seats, seed, actions, snapshot, view: { cameraSide } }.
-import { checkInvariants, type Action, type Card, type DeckId, type Rules, type Seat, type State } from '../engine';
+import { checkInvariants, promiseGroupOf, samePromise, type Action, type Card, type DeckId, type Rules, type Seat, type State } from '../engine';
 import type { BoardData } from '../data/classicBoard';
 import type { KV } from '../storage/db';
 
-export const SAVE_VERSION = 2;
+/** v3 (Stage 3): group promises replace tile promises. v2 saves are migrated on load. */
+export const SAVE_VERSION = 3;
 export const MAX_SLOTS = 10;
 export const AUTOSAVE_ID = 'autosave';
 
@@ -58,9 +59,56 @@ export function makeSave(
   };
 }
 
-/** Validate a save (imported JSON or from storage). Returns an error message or null. */
+interface OldPromise {
+  id?: number;
+  kind: string;
+  from: number;
+  to: number;
+  tileId?: number;
+  turnsLeft?: number;
+}
+
+/** v2 tile promise → v3 group promise (the tile's group, left = total = turnsLeft). Null if unusable. */
+function migratePromise(board: BoardData, p: OldPromise) {
+  if ((p as { group?: string }).group !== undefined) return p as unknown as State['promises'][number];
+  const group = p.tileId !== undefined ? promiseGroupOf(board, p.tileId) : null;
+  const n = Math.max(1, Math.min(99, Math.floor(p.turnsLeft ?? 1)));
+  if (!group) return null;
+  return { id: p.id ?? 0, kind: 'rentFree' as const, from: p.from, to: p.to, group, total: n, left: n };
+}
+
+/**
+ * Bring an older save up to SAVE_VERSION in place (Stage 3 §5.3): tile-based rent-free promises
+ * become group promises, duplicates are merged. Safe to call on any object; returns it.
+ */
+export function migrateSave<T>(f: T): T {
+  const s = f as Partial<SaveFile> | null;
+  if (!s || typeof s !== 'object' || s.version !== 2) return f;
+  const snap = s.snapshot as State | undefined;
+  if (snap && Array.isArray(snap.promises) && snap.board) {
+    const merged: State['promises'] = [];
+    for (const old of snap.promises as unknown as OldPromise[]) {
+      const p = migratePromise(snap.board, old);
+      if (!p) continue;
+      const same = merged.find((q) => samePromise(q, p));
+      if (same) {
+        same.left += p.left;
+        same.total += p.total;
+      } else merged.push(p);
+    }
+    snap.promises = merged;
+    if (snap.trade?.promises) {
+      const terms = (snap.trade.promises as unknown as OldPromise[]).map((p) => migratePromise(snap.board, p)).filter((p) => p !== null);
+      snap.trade.promises = terms.filter((p, i) => terms.findIndex((q) => samePromise(q, p)) === i).map(({ kind, from, to, group, total, left }) => ({ kind, from, to, group, total, left }));
+    }
+  }
+  s.version = SAVE_VERSION;
+  return f;
+}
+
+/** Validate a save (imported JSON or from storage). Returns an error message or null. Migrates older versions first. */
 export function saveProblem(f: unknown): string | null {
-  const s = f as Partial<SaveFile>;
+  const s = migrateSave(f as Partial<SaveFile>);
   if (!s || typeof s !== 'object') return 'That file is not a Property Night save.';
   if (s.version !== SAVE_VERSION) return `Unsupported save version ${String(s.version)}.`;
   if (!s.snapshot || typeof s.snapshot !== 'object' || !Array.isArray(s.snapshot.players) || !Array.isArray(s.snapshot.tiles)) return 'The save has no game state.';
@@ -78,7 +126,7 @@ export class Saves {
   constructor(private kv: KV) {}
 
   async list(): Promise<SaveFile[]> {
-    const all = await this.kv.list<SaveFile>('saves');
+    const all = (await this.kv.list<SaveFile>('saves')).map((f) => migrateSave(f));
     return all.sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
@@ -87,7 +135,7 @@ export class Saves {
   }
 
   async get(id: string): Promise<SaveFile | undefined> {
-    return this.kv.get<SaveFile>('saves', id);
+    return migrateSave(await this.kv.get<SaveFile>('saves', id));
   }
 
   async autosave(f: SaveFile): Promise<void> {

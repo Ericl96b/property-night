@@ -214,29 +214,30 @@ describe('trades and promises', () => {
     expect(act(s, { type: 'mortgagedChoice', seat: 0, tile: 3, unmortgage: false }).s.players[0].cash).toBe(1487);
   });
 
-  it('rent-free promise: no rent for N of the beneficiary’s turns, then it expires', () => {
+  it('rent-free promise: no rent for N landings, then it expires', () => {
     const s0 = edit(game(), (d) => {
       own(d, 1, 3);
       own(d, 0, 39);
     });
     const o = offer({
       give: { tiles: [39], cash: 0, gojf: 0 },
-      promises: [{ kind: 'rentFree', from: 1, to: 0, tileId: 3, turnsLeft: 1 }],
+      promises: [{ kind: 'rentFree', from: 1, to: 0, group: 'brown', total: 1, left: 1 }],
     });
     let s = run(s0, { type: 'proposeTrade', seat: 0, offer: o }, { type: 'acceptTrade', seat: 1 }).s;
     expect(s.promises).toHaveLength(1);
-    s = run(withDice(s, 1, 2), { type: 'roll', seat: 0 }).s;
+    const r = run(withDice(s, 1, 2), { type: 'roll', seat: 0 });
+    s = r.s;
     expect(s.players[0].cash).toBe(1500);
-    s = act(s, { type: 'endTurn', seat: 0 }).s;
+    expect(r.ev.some((e) => e.type === 'rentWaived')).toBe(true);
     expect(s.promises).toHaveLength(0);
   });
 
-  it('a promise is void once the tile changes owner', () => {
+  it('a promise is void once a party is out', () => {
     const s0 = edit(game(3), (d) => {
       own(d, 1, 3);
       own(d, 0, 39);
     });
-    const o = offer({ give: { tiles: [39], cash: 0, gojf: 0 }, promises: [{ kind: 'rentFree', from: 1, to: 0, tileId: 3, turnsLeft: 5 }] });
+    const o = offer({ give: { tiles: [39], cash: 0, gojf: 0 }, promises: [{ kind: 'rentFree', from: 1, to: 0, group: 'brown', total: 5, left: 5 }] });
     const s = run(s0, { type: 'proposeTrade', seat: 0, offer: o }, { type: 'acceptTrade', seat: 1 }).s;
     const r = act(s, { type: 'forfeit', seat: 1 });
     expect(r.s.promises).toHaveLength(0);
@@ -245,7 +246,7 @@ describe('trades and promises', () => {
 
   it('promises can be turned off', () => {
     const s0 = edit(game(2, { rules: { promisesAllowed: false } }), (d) => own(d, 1, 3));
-    const o = offer({ give: { tiles: [], cash: 1, gojf: 0 }, promises: [{ kind: 'rentFree', from: 1, to: 0, tileId: 3, turnsLeft: 2 }] });
+    const o = offer({ give: { tiles: [], cash: 1, gojf: 0 }, promises: [{ kind: 'rentFree', from: 1, to: 0, group: 'brown', total: 2, left: 2 }] });
     expect(() => apply(s0, { type: 'proposeTrade', seat: 0, offer: o })).toThrow(/promises are off/);
   });
 });

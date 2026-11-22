@@ -102,6 +102,42 @@ function ribbonTexture(): THREE.CanvasTexture {
   return t;
 }
 
+/** No Building badge (Stage 3 §5.3): a house in a cream disc, struck through in oxblood. */
+function noBuildTexture(): THREE.CanvasTexture {
+  const c = makeCanvas(256, 256);
+  const ctx = c.getContext('2d')!;
+  ctx.beginPath();
+  ctx.arc(128, 128, 112, 0, Math.PI * 2);
+  ctx.fillStyle = '#FBF6EA';
+  ctx.fill();
+  ctx.lineWidth = 18;
+  ctx.strokeStyle = '#8E2F23';
+  ctx.stroke();
+  // House.
+  ctx.fillStyle = '#2B2119';
+  ctx.beginPath();
+  ctx.moveTo(128, 58);
+  ctx.lineTo(196, 118);
+  ctx.lineTo(178, 118);
+  ctx.lineTo(178, 186);
+  ctx.lineTo(78, 186);
+  ctx.lineTo(78, 118);
+  ctx.lineTo(60, 118);
+  ctx.closePath();
+  ctx.fill();
+  // Strike.
+  ctx.strokeStyle = '#8E2F23';
+  ctx.lineWidth = 22;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(58, 58);
+  ctx.lineTo(198, 198);
+  ctx.stroke();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 export class Decals {
   readonly group = new THREE.Group();
   private discGeo = new THREE.CylinderGeometry(0.0042, 0.0042, 0.0011, 28);
@@ -110,6 +146,8 @@ export class Decals {
   private owners = new Map<number, THREE.Mesh>();
   private mortgaged = new Map<number, THREE.Group>();
   private promises = new Map<number, THREE.Mesh>();
+  private noBuilds = new Map<number, THREE.Mesh>();
+  private noBuildMat = new THREE.MeshStandardMaterial({ map: noBuildTexture(), transparent: true, alphaTest: 0.05, roughness: 0.5, polygonOffset: true, polygonOffsetFactor: -2 });
   private locks = new Map<number, THREE.Mesh>();
   private lockMat = new THREE.MeshStandardMaterial({ map: lockTexture(), transparent: true, alphaTest: 0.05, roughness: 0.5, polygonOffset: true, polygonOffsetFactor: -2 });
   private desatMat: THREE.MeshStandardMaterial;
@@ -228,21 +266,30 @@ export class Decals {
     this.locks.set(tile, m);
   }
 
-  setPromise(tile: number, on: boolean): void {
-    if (this.promises.has(tile) === on) return;
-    const old = this.promises.get(tile);
-    if (old) this.group.remove(old);
-    this.promises.delete(tile);
+  /** Promise badges (Stage 3 §5.3): rent-free ribbon and the No Building decal. */
+  setPromiseBadges(tile: number, on: { rentFree: boolean; noBuild: boolean }): void {
+    this.setBadge(this.promises, this.ribbonMat, tile, on.rentFree, 0.016, OWNER_DISC_LY - 10);
+    this.setBadge(this.noBuilds, this.noBuildMat, tile, on.noBuild, 0.013, OWNER_DISC_LY - 30);
+  }
+
+  private setBadge(map: Map<number, THREE.Mesh>, mat: THREE.Material, tile: number, on: boolean, size: number, ly: number): void {
+    if (map.has(tile) === on) return;
+    const old = map.get(tile);
+    if (old) {
+      this.group.remove(old);
+      old.geometry.dispose();
+    }
+    map.delete(tile);
     if (!on) return;
     const f = tileFrame(tile);
-    const geo = new THREE.PlaneGeometry(0.016, 0.016);
+    const geo = new THREE.PlaneGeometry(size, size);
     geo.rotateX(-Math.PI / 2);
     geo.rotateY(tileYaw(f));
-    const [x, z] = tileLocalToWorld(f, TILE_W_PX / 2 - 11, OWNER_DISC_LY - 10);
+    const [x, z] = tileLocalToWorld(f, TILE_W_PX / 2 - 11, ly);
     geo.translate(x, BOARD_TOP + LIFT * 2, z);
-    const m = new THREE.Mesh(geo, this.ribbonMat);
+    const m = new THREE.Mesh(geo, mat);
     m.receiveShadow = true;
     this.group.add(m);
-    this.promises.set(tile, m);
+    map.set(tile, m);
   }
 }

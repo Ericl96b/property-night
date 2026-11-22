@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GameController } from '../../src/app/controller';
-import { AUTOSAVE_ID, Saves, makeSave, saveProblem } from '../../src/app/saves';
+import { AUTOSAVE_ID, SAVE_VERSION, Saves, makeSave, saveProblem } from '../../src/app/saves';
 import { apply, newGame, type Action, type State } from '../../src/engine';
 import { chooseAction } from '../../src/bots';
 import { seatsToAct } from '../../src/engine';
@@ -119,5 +119,29 @@ describe('undo (SPEC §9)', () => {
     c.dispatch({ type: 'build', seat: 0, tile: 6 });
     expect(c.view.undo).toBeNull();
     expect(c.undo()).toBe(false);
+  });
+
+  it('v2 saves with tile promises load as group promises (Stage 3 §5.3), merging duplicates', async () => {
+    const humans = [{ kind: 'human' as const, name: 'A' }, { kind: 'human' as const, name: 'B' }];
+    const s = edit(newGame({ seats: humans, seed: 7, turnOrder: 'fixed' }), (d) => own(d, 1, 1, 3, 5));
+    const v2 = JSON.parse(JSON.stringify(makeSave('slot-2', 'Old', s, [], 7, 0)));
+    v2.version = 2;
+    v2.snapshot.promises = [
+      { id: 1, kind: 'rentFree', from: 1, to: 0, tileId: 1, turnsLeft: 2 },
+      { id: 2, kind: 'rentFree', from: 1, to: 0, tileId: 3, turnsLeft: 3 },
+      { id: 3, kind: 'rentFree', from: 1, to: 0, tileId: 5, turnsLeft: 4 },
+    ];
+    v2.snapshot.nextPromiseId = 4;
+    const kv = new Saves(memoryKV());
+    expect(() => kv.parseImport(JSON.stringify({ format: 'property-night/save', ...v2 }))).not.toThrow();
+    const raw = memoryKV();
+    await raw.put('saves', JSON.parse(JSON.stringify(v2)));
+    const f = (await new Saves(raw).get('slot-2'))!;
+    expect(f.version).toBe(SAVE_VERSION);
+    expect(f.snapshot.promises).toEqual([
+      { id: 1, kind: 'rentFree', from: 1, to: 0, group: 'brown', total: 5, left: 5 },
+      { id: 3, kind: 'rentFree', from: 1, to: 0, group: 'railroad', total: 4, left: 4 },
+    ]);
+    expect(saveProblem(f)).toBeNull();
   });
 });

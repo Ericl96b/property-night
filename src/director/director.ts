@@ -8,7 +8,20 @@ import type { GameScene } from '../render/scene';
 import { CLOSEUP, type ShotPose } from '../render/cameraDirector';
 import type { TokenId } from '../render/tokens/tokens';
 import { Rng } from '../engine/rng';
-import { groupTiles, type Creditor, type GameEvent, type State } from '../engine';
+import { groupTiles, promiseGroupOf, type Creditor, type GameEvent, type State } from '../engine';
+
+/**
+ * Which promise badges a tile shows (Stage 3 §5.3): the rent-free ribbon on every tile of the
+ * group the promiser owns now; the No Building decal on every tile of the set.
+ */
+export function promiseBadgesOn(s: State, tile: number): { rentFree: boolean; noBuild: boolean } {
+  const g = promiseGroupOf(s.board, tile);
+  const owner = s.tiles[tile].owner;
+  return {
+    rentFree: s.promises.some((p) => p.kind === 'rentFree' && p.group === g && p.from === owner),
+    noBuild: s.promises.some((p) => p.kind === 'noBuild' && p.group === g),
+  };
+}
 import { DEFAULT_SETTINGS, isBigPayment, type Settings } from '../app/settings';
 import type { Animation } from './queue';
 import { SILENT, type SoundFx } from '../audio/sound';
@@ -407,7 +420,7 @@ export class Director implements DirectorLike {
       sc.decals.setOwner(i, ts.owner === null ? null : state.seats[ts.owner].color);
       sc.signs.setOwner(i, ts.owner === null ? null : state.seats[ts.owner].color);
       sc.decals.setMortgaged(i, ts.mortgaged);
-      sc.decals.setPromise(i, state.promises.some((p) => p.tileId === i));
+      sc.decals.setPromiseBadges(i, promiseBadgesOn(state, i));
       sc.decals.setPledged(i, state.players.some((p) => p.loans.some((l) => l.collateral.includes(i))));
       const cur = sc.buildings.countOn(i);
       const want = { houses: ts.buildings === 5 ? 0 : ts.buildings, hotel: ts.buildings === 5 };

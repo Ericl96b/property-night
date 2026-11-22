@@ -20,7 +20,7 @@ import { openKV } from './storage/db';
 import { runMigrations } from './storage/migrations';
 import { RulesPresets } from './app/presets';
 import { BoardPresets, printView } from './app/boardPresets';
-import { AUTOSAVE_ID, Saves, makeSave, type SaveFile } from './app/saves';
+import { AUTOSAVE_ID, Saves, makeSave, migrateSave, type SaveFile } from './app/saves';
 import { downloadText } from './app/presets';
 import { CLASSIC_RULES } from './engine';
 import { Sound } from './audio/sound';
@@ -158,7 +158,7 @@ async function boot(): Promise<void> {
 
   const resume = async (raw: SaveFile) => {
     // Plain copy: saves picked in the UI may be reactive proxies, which IndexedDB cannot store.
-    const f: SaveFile = JSON.parse(JSON.stringify(raw));
+    const f: SaveFile = migrateSave(JSON.parse(JSON.stringify(raw)));
     renderPortraits(f.snapshot.seats.map((s) => ({ token: s.token, color: s.color })));
     await ensureBoard(f.snapshot.board, f.snapshot.rules);
     createdAt = f.createdAt;
@@ -184,7 +184,7 @@ async function boot(): Promise<void> {
     for (let i = 0; i < 40; i++) {
       scene.decals.setOwner(i, null);
       scene.decals.setMortgaged(i, false);
-      scene.decals.setPromise(i, false);
+      scene.decals.setPromiseBadges(i, { rentFree: false, noBuild: false });
       scene.decals.setPledged(i, false);
       scene.buildings.set(i, 0, false);
     }

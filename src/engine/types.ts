@@ -1,6 +1,6 @@
 // Engine data model (SPEC §12). Plain JSON-serializable objects: the state can be saved,
 // cloned and replayed. No rendering or DOM types here.
-import type { BoardData } from '../data/classicBoard';
+import type { BoardData, GroupId } from '../data/classicBoard';
 import type { Card, DeckId } from './cards';
 import type { RngState } from './rng';
 import type { Rules } from './rules';
@@ -125,18 +125,32 @@ export interface TradeSide {
   gojf: number;
 }
 
-/** Generic promise model (SPEC §6). rentFree: `to` pays no rent to `from` on `tileId`. */
+export type PromiseKind = 'rentFree' | 'noBuild';
+/** A color set, or all railroads / all utilities. noBuild promises take color sets only. */
+export type PromiseGroup = GroupId | 'railroad' | 'utility';
+
+/**
+ * Group promise (Stage 3 §5). rentFree: `to` pays `from` no rent on any tile of `group` that
+ * `from` owns, for `left` landings that would owe rent. noBuild: `from` can't build on the color
+ * set `group` for `left` rounds.
+ */
 export interface PromiseTerm {
-  kind: 'rentFree';
+  kind: PromiseKind;
+  /** Promiser: carries the obligation. */
   from: number;
+  /** Holder: benefits. */
   to: number;
-  tileId: number;
-  /** Counts down at the end of each of `to`'s turns. */
-  turnsLeft: number;
+  group: PromiseGroup;
+  /** N as agreed (for the voucher's punch holes). */
+  total: number;
+  /** Landings (rentFree) or rounds (noBuild) remaining. */
+  left: number;
 }
 
 export interface GamePromise extends PromiseTerm {
   id: number;
+  /** noBuild: a round ends each time this seat starts a turn. */
+  anchor?: number;
 }
 
 export interface TradeOffer {
@@ -197,6 +211,8 @@ export interface State {
   trade: TradeOffer | null;
   promises: GamePromise[];
   nextPromiseId: number;
+  /** Promises locked off at game start because a normal bot was seated (Stage 3 §6). */
+  promisesLock?: 'bot';
   nextLoanId: number;
   winner: number | null;
   log: LogEntry[];
@@ -273,6 +289,8 @@ export type GameEvent =
   | { type: 'tradeAccepted'; offer: TradeOffer }
   | { type: 'tradeRejected'; offer: TradeOffer }
   | { type: 'promiseEnded'; promise: GamePromise; reason: 'expired' | 'void' }
+  /** A rent-free promise waived rent on a landing that would have owed `rent`. */
+  | { type: 'rentWaived'; seat: number; owner: number; tile: number; rent: number; promise: GamePromise }
   | { type: 'turnEnded'; seat: number }
   /** First human hotel: bank-backed bots lose their backing (cutoff) or leave the table (remove). */
   | { type: 'bankBackingEnded'; mode: 'cutoff' | 'remove'; seats: number[]; by: number; tile: number; cash: number }

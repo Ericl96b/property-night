@@ -9,12 +9,15 @@ import {
   liquidationValue,
   mortgageBlocker,
   mortgageValue,
+  promiseGroupOf,
   sellBlocker,
   unmortgageBlocker,
   unmortgageCost,
   type Action,
+  type PromiseGroup,
   type State,
 } from '../engine';
+import { GROUP_LABEL, uiGroupColor, uiGroupLight } from './groups';
 import type { SymbolName } from '../render/symbols';
 
 export const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
@@ -165,14 +168,13 @@ export function deedInfo(s: State, tile: number): DeedInfo {
   const base = { name: t.name, mortgaged: ts.mortgaged, owner: ts.owner, price: t.price };
   const mort = t.price !== undefined ? { mortgagedFor: money(mortgageValue(s, tile)), unmortgageFor: money(unmortgageCost(s, tile)) } : {};
   if (t.type === 'street') {
-    const g = s.board.groups[t.group!];
     const r = t.rents!;
     return {
       ...base,
       ...mort,
       kind: 'street',
-      band: g.color,
-      lightText: g.lightText,
+      band: uiGroupColor(s.board, t.group!),
+      lightText: uiGroupLight(s.board, t.group!),
       headline: `Rent ${money(r[0])}`,
       rows: [
         { label: 'With 1 house', value: money(r[1]) },
@@ -239,8 +241,36 @@ export interface PlayerSummary {
   hotels: number;
   active: boolean;
   kind: string;
-  /** Rent-free promises involving this seat, with turns remaining. */
-  promises: string[];
+  /** Promises involving this seat, with the count remaining (Stage 3 §5.3 badges). */
+  promises: PromiseBadge[];
+}
+
+export interface PromiseBadge {
+  kind: 'rentFree' | 'noBuild';
+  group: PromiseGroup;
+  color: string;
+  /** e.g. "Riley rent-free · 3", "Rides free on Railroads · 2", "No building · Orange · 2". */
+  text: string;
+  left: number;
+}
+
+/** Badges for one seat's promises, as promiser or holder. */
+export function promiseBadges(s: State, seat: number): PromiseBadge[] {
+  return s.promises
+    .filter((pr) => pr.from === seat || pr.to === seat)
+    .map((pr) => {
+      const g = GROUP_LABEL[pr.group];
+      const other = s.seats[pr.from === seat ? pr.to : pr.from].name;
+      const text =
+        pr.kind === 'noBuild'
+          ? pr.from === seat
+            ? `No building · ${g} · ${pr.left}`
+            : `${other} can't build ${g} · ${pr.left}`
+          : pr.from === seat
+            ? `${other} rent-free on ${g} · ${pr.left}`
+            : `Rides free on ${other}'s ${g} · ${pr.left}`;
+      return { kind: pr.kind, group: pr.group, color: uiGroupColor(s.board, pr.group), text, left: pr.left };
+    });
 }
 
 export function players(s: State): PlayerSummary[] {
@@ -263,9 +293,7 @@ export function players(s: State): PlayerSummary[] {
       hotels: b.hotels,
       active: s.turn.seat === i,
       kind: seat.kind,
-      promises: s.promises
-        .filter((pr) => pr.from === i || pr.to === i)
-        .map((pr) => `${pr.to === i ? 'Rent-free' : 'Promised'} on ${s.board.tiles[pr.tileId].name} (${pr.turnsLeft})`),
+      promises: promiseBadges(s, i),
     };
   });
 }
@@ -351,16 +379,6 @@ export interface ManageGroup {
   rows: ManageRow[];
 }
 
-const GROUP_LABEL: Record<string, string> = {
-  brown: 'Brown',
-  lightBlue: 'Light blue',
-  pink: 'Pink',
-  orange: 'Orange',
-  red: 'Red',
-  yellow: 'Yellow',
-  green: 'Green',
-  darkBlue: 'Dark blue',
-};
 
 /** Every property a seat owns, grouped by set, with each management action and why it is blocked. */
 export function manageGroups(s: State, seat: number): ManageGroup[] {
@@ -369,8 +387,9 @@ export function manageGroups(s: State, seat: number): ManageGroup[] {
     const ts = s.tiles[t.index];
     if (ts.owner !== seat) continue;
     const key = t.group ?? t.type;
-    const color = t.group ? s.board.groups[t.group].color : t.type === 'railroad' ? '#2B2119' : '#5E4C3B';
-    const label = t.group ? GROUP_LABEL[t.group] ?? t.group : t.type === 'railroad' ? 'Railroads' : 'Utilities';
+    const pg = promiseGroupOf(s.board, t.index)!;
+    const color = uiGroupColor(s.board, pg);
+    const label = GROUP_LABEL[pg];
     if (!groups.has(key)) {
       const all = s.board.tiles.filter((x) => (x.group ?? x.type) === key);
       groups.set(key, { key, label, color, full: !!t.group && all.every((x) => s.tiles[x.index].owner === seat), rows: [] });

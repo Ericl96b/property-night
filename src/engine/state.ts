@@ -3,6 +3,7 @@ import { CLASSIC_BOARD, type BoardData } from '../data/classicBoard';
 import { CLASSIC_CHANCE, CLASSIC_CHEST, type Card, type DeckId } from './cards';
 import { nextInt, seedRng, type RngState } from './rng';
 import { CLASSIC_RULES, type Rules } from './rules';
+import { seatsLockPromises } from './promises';
 import type { GameHistory, PlayerStats, Seat, SeatKind, State } from './types';
 
 export const NEW_STATS: PlayerStats = { rentPaid: 0, rentReceived: 0, auctionBuys: 0, directBuys: 0, loansTaken: 0, borrowed: 0, loanInterest: 0 };
@@ -53,6 +54,9 @@ export function sidesFor(n: number): (0 | 1 | 2 | 3)[] {
 export function newGame(cfg: NewGameConfig): State {
   if (cfg.seats.length < 2 || cfg.seats.length > 6) throw new Error('2–6 seats required');
   const rules = { ...(cfg.rules ?? CLASSIC_RULES) };
+  // Bot lock (Stage 3 §6): a normal bot at the table turns trade promises off for the whole game.
+  const botLock = seatsLockPromises(cfg.seats.map((x) => x.kind));
+  if (botLock) rules.promisesAllowed = false;
   const board = cfg.board ?? CLASSIC_BOARD;
   const decks = cfg.decks ?? { chance: CLASSIC_CHANCE, chest: CLASSIC_CHEST };
   const rng = seedRng(cfg.seed);
@@ -104,6 +108,7 @@ export function newGame(cfg: NewGameConfig): State {
     trade: null,
     promises: [],
     nextPromiseId: 1,
+    ...(botLock ? { promisesLock: 'bot' as const } : {}),
     nextLoanId: 1,
     winner: null,
     log: [{ turn: 1, seat: 0, text: `${seats[0].name} goes first` }],

@@ -1,6 +1,7 @@
 // Read-only rule queries shared by the reducer, legalActions, bots and UI.
 import type { BoardData, GroupId, Tile } from '../data/classicBoard';
 import type { State } from './types';
+import { noBuildPromise, noBuildReason } from './promises';
 
 const groupCache = new WeakMap<BoardData, Map<GroupId, number[]>>();
 
@@ -147,6 +148,8 @@ export function buildBlocker(s: State, seat: number, tile: number): string | nul
   if (s.rules.buildTiming === 'ownTurn' && s.turn.seat !== seat) return 'only on your own turn';
   if (t.type !== 'street' || !t.group) return 'not a street';
   if (ts.owner !== seat) return 'not yours';
+  const promise = noBuildPromise(s, seat, tile);
+  if (promise) return noBuildReason(s, promise);
   if (!ownsGroup(s, seat, t.group)) return 'needs the full color set';
   const group = groupTiles(s.board, t.group);
   if (!s.rules.buildWithMortgagedInSet && group.some((i) => s.tiles[i].mortgaged)) return 'a lot in the set is mortgaged';
