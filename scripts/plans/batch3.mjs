@@ -4,7 +4,7 @@ const base = process.env.PN_URL ?? 'http://localhost:5173/';
 const W = Number(process.env.PN_W ?? 1920);
 const H = Number(process.env.PN_H ?? 1080);
 
-const GROUPS = ['brown', 'lightBlue', 'pink', 'orange', 'red', 'yellow', 'green', 'darkBlue'];
+const GROUPS = ['brown', 'lightBlue', 'yellow', 'orange', 'red', 'pink', 'green', 'darkBlue'];
 
 /** Run one Buildings animation through the scene's queue (scale stretches it for screenshots). */
 const anim = (method, tile, scale) => ({
@@ -118,7 +118,7 @@ export default {
             if (tile.type === 'street') t.buildings = i % 3 === 0 ? 5 : 4;
             else t.mortgaged = i % 2 === 0;
           });
-          // Pink and green have no i % 3 === 0 street: give each group's last street a hotel.
+          // Yellow and green have no i % 3 === 0 street: give each group's last street a hotel.
           const last = {};
           s.board.tiles.forEach((tile, i) => { if (tile.type === 'street') last[tile.group] = i; });
           for (const i of Object.values(last)) if (!s.board.tiles.some((t, j) => t.group === s.board.tiles[i].group && s.tiles[j].buildings === 5)) s.tiles[i].buildings = 5;

@@ -9,7 +9,7 @@ import { PLAYER_COLORS } from '../ui/theme';
 export type PresetId = 'empty' | 'allHouses' | 'allHotels' | 'worstCase' | 'oneGroup';
 export type TokenCount = 0 | 2 | 6;
 
-export const GROUP_ORDER: GroupId[] = ['brown', 'lightBlue', 'pink', 'orange', 'red', 'yellow', 'green', 'darkBlue'];
+export const GROUP_ORDER: GroupId[] = ['brown', 'lightBlue', 'yellow', 'orange', 'red', 'pink', 'green', 'darkBlue'];
 export const SANDBOX_TOKENS = ['teacup', 'key', 'bicycle', 'cat', 'rocket', 'crown'];
 /** Where tokens stand: one per side, two more, the sixth in jail. */
 const TOKEN_SPOTS = [1, 16, 21, 26, 37, 10];

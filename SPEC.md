@@ -235,7 +235,7 @@ Borrow from the bank on your own turn, secured by pledged properties or unsecure
 
 **Board data**
 
-- Classic 40-tile layout and positions; 22 streets in 8 classic color groups (brown #955436, light blue #AAE0FA, pink #D93A96, orange #F7941D, red #ED1B24, yellow #FEF200, green #1FB25A, dark blue #0072BB), 4 railroads, 2 utilities, 2 taxes, 3 + 3 card spaces, 4 corners.
+- Classic 40-tile layout and positions; 22 streets in 8 classic color groups (brown #955436, light blue #AAE0FA, yellow #D4A72C, orange #F7941D, red #ED1B24, pink #F569D7, green #1FB25A, dark blue #0072BB), 4 railroads, 2 utilities, 2 taxes, 3 + 3 card spaces, 4 corners.
 - Prices, rent tables, house costs, mortgage values, railroad rents (25/50/100/200) and utility multipliers (4×/10×) default to standard US values.
 - Default names are placeholders; the user's own board preset is the expected normal use. The reference files use stand-in names (Hazel Lane … Midnight Park).
 

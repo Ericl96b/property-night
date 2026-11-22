@@ -30,6 +30,25 @@ describe('classic board data', () => {
     expect(CLASSIC_BOARD.groups.darkBlue.color).toBe('#0072BB');
   });
 
+  it('has Yellow on the second row and Pink on the third (Batch 5 swap, prices stay with position)', () => {
+    const pick = (i: number) => ({ name: tiles[i].name, group: tiles[i].group, price: tiles[i].price, rents: tiles[i].rents, houseCost: tiles[i].houseCost });
+    const low = [10, 50, 150, 450, 625, 750];
+    const high = [22, 110, 330, 800, 975, 1150];
+    expect([11, 13, 14].map(pick)).toEqual([
+      { name: 'Goldfinch Lane', group: 'yellow', price: 140, rents: low, houseCost: 100 },
+      { name: 'Honey Street', group: 'yellow', price: 140, rents: low, houseCost: 100 },
+      { name: 'Buttercup Row', group: 'yellow', price: 160, rents: [12, 60, 180, 500, 700, 900], houseCost: 100 },
+    ]);
+    expect([26, 27, 29].map(pick)).toEqual([
+      { name: 'Rose Court', group: 'pink', price: 260, rents: high, houseCost: 150 },
+      { name: 'Peony Place', group: 'pink', price: 260, rents: high, houseCost: 150 },
+      { name: 'Rosewood Lane', group: 'pink', price: 280, rents: [24, 120, 360, 850, 1025, 1200], houseCost: 150 },
+    ]);
+    expect(CLASSIC_BOARD.groups.yellow).toEqual({ id: 'yellow', color: '#D4A72C', lightText: false });
+    expect(CLASSIC_BOARD.groups.pink).toEqual({ id: 'pink', color: '#F569D7', lightText: false });
+    expect(Object.keys(CLASSIC_BOARD.groups)).toEqual(['brown', 'lightBlue', 'yellow', 'orange', 'red', 'pink', 'green', 'darkBlue']);
+  });
+
   it('rent tables never decrease', () => {
     for (const t of tiles.filter((x) => x.rents)) {
       for (let i = 1; i < t.rents!.length; i++) expect(t.rents![i]).toBeGreaterThan(t.rents![i - 1]);

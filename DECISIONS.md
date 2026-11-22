@@ -291,3 +291,28 @@ Each color group gets its own house and hotel design, replacing the green and re
   - AO off: 122 draw calls at High and 123 at Low (budget 150); 0 idle frames in 2 s.
   - AO on (High): **247 draw calls, over budget.** Hiding all buildings still gives 181: the GTAO normal pass redraws the whole scene, and the board was already over 150 with AO on after Batch 2 (signs, decks), which only measured AO off. The buildings add 33 calls with AO off and about 66 with AO on. The owner accepted this on 2026-11-21. AO is off by default.
   - `buildingsMs` (the `buildGameAssets` call): 360–680 ms across runs, on a noisy headless machine. The build is not deferred; the owner can ask for that if startup feels slow.
+
+## Batch 5: Pink/Yellow swap (owner request, 2026-11-22)
+
+The Pink and Yellow color groups trade places on the board. Spec: `docs/batch5/SPEC-color-swap.md`.
+
+| Index | Name now → new | Group now → new | Price (unchanged) |
+| --- | --- | --- | --- |
+| 11 | Rose Court → Goldfinch Lane | pink → yellow | 140 |
+| 13 | Peony Place → Honey Street | pink → yellow | 140 |
+| 14 | Rosewood Lane → Buttercup Row | pink → yellow | 160 |
+| 26 | Goldfinch Lane → Rose Court | yellow → pink | 260 |
+| 27 | Honey Street → Peony Place | yellow → pink | 260 |
+| 29 | Buttercup Row → Rosewood Lane | yellow → pink | 280 |
+
+- **Colors:** yellow is now mustard `#D4A72C` and pink is bubblegum `#F569D7`, both with dark text. No other group changes. Board-order group lists (`CLASSIC_GROUPS` keys, `GROUP_ORDER`, `GROUP_IDS`, the batch3 plan's `GROUPS`) now run brown, light blue, yellow, orange, red, pink, green, dark blue. The group ids and labels are unchanged.
+- **Prices stay with position, names travel with the group:** the cheaper second-row set (Yellow) keeps the old pink prices, rents and $100 houses. The third-row set (Pink) keeps the old yellow prices, rents and $150 houses.
+- **Cards stay position-based:** "Stroll down to {tile}" still moves to tile 11 and now reads "Goldfinch Lane". No card target changed.
+- **Buildings follow the group:** Villa Mediterranea / Hotel Miramar now stand on tiles 11/13/14, and the Painted Lady / The Rosemont on tiles 26/27/29, in the new colors. Designs, scale and rendering are unchanged.
+- **Data wipe:** `src/storage/migrations.ts` runs at startup right after the KV store opens. If `meta/dataVersion` is missing or below 2, it deletes every save (autosave included) and every user board preset, then writes `dataVersion` 2. Rules presets, settings, input bindings and benchmark history stay. A failed wipe is logged and startup continues. `SAVE_VERSION` is now 2, so exported save files from before this change are rejected on import ("Unsupported save version 1."). There is no converter.
+- **Judgment calls:**
+  - `kv` was added to the `window.__pn` debug object so `batch5.mjs` can check the migration through the app's KV.
+  - Board-preset export files (`property-night/board` version 1) still import: they are self-contained boards, and the spec wipes only stored presets.
+  - The comment in `batch3.mjs` now says yellow and green have no `i % 3 === 0` street (pink has tile 27). The Batch 3 note above stays as written.
+  - No "Victorian = mid-low tier" note existed in this file, so nothing was marked superseded.
+  - The spec moved, unchanged, to `docs/batch5/SPEC-color-swap.md`.

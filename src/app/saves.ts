@@ -5,7 +5,7 @@ import { checkInvariants, type Action, type Card, type DeckId, type Rules, type 
 import type { BoardData } from '../data/classicBoard';
 import type { KV } from '../storage/db';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const MAX_SLOTS = 10;
 export const AUTOSAVE_ID = 'autosave';
 

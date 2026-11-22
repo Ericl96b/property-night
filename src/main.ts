@@ -17,6 +17,7 @@ import App from './ui/App.svelte';
 import { boardMaxNdcX } from './ui/stage';
 import { sideOfTile } from './render/layout';
 import { openKV } from './storage/db';
+import { runMigrations } from './storage/migrations';
 import { RulesPresets } from './app/presets';
 import { BoardPresets, printView } from './app/boardPresets';
 import { AUTOSAVE_ID, Saves, makeSave, type SaveFile } from './app/saves';
@@ -95,6 +96,12 @@ async function boot(): Promise<void> {
   // Controller buttons may not count as a user gesture for autoplay, but try anyway.
   input.onAnyButton = unlockAudio;
   const kv = await openKV();
+  // One-time wipe of data from older layouts (Batch 5). A failed wipe must not block startup.
+  try {
+    await runMigrations(kv);
+  } catch (e) {
+    console.error('Data migration failed', e);
+  }
   const presets = new RulesPresets(kv);
   const boards = new BoardPresets(kv);
   const saves = new Saves(kv);
@@ -358,7 +365,7 @@ async function boot(): Promise<void> {
     f(s);
     controller.load(s);
   };
-  (window as unknown as { __pn: unknown }).__pn = { scene, controller, director, settings, forceDice, patchState, input, app, saves, sound, perf, testBoard: () => testBoard };
+  (window as unknown as { __pn: unknown }).__pn = { scene, controller, director, settings, forceDice, patchState, input, app, saves, kv, sound, perf, testBoard: () => testBoard };
   scene.renderer.requestRender();
   // Startup budget (SPEC §10.10): navigation start → interactive menu.
   performance.mark('pn-ready');

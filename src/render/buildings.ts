@@ -11,7 +11,7 @@ import { BAND_CENTER_LY, BOARD_TOP, houseSlotLX, tileFrame, tileLocalToWorld, ti
 /** Board units per model unit, uniform for houses and hotels (Batch 3 spec §5). */
 export const BUILDING_SCALE = 0.016;
 
-const GROUP_IDS: GroupId[] = ['brown', 'lightBlue', 'pink', 'orange', 'red', 'yellow', 'green', 'darkBlue'];
+const GROUP_IDS: GroupId[] = ['brown', 'lightBlue', 'yellow', 'orange', 'red', 'pink', 'green', 'darkBlue'];
 
 export type BuildingKind = 'house' | 'hotel';
 
