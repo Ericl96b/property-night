@@ -9,6 +9,7 @@
   import { PLAYER_COLORS, TOKEN_NAMES } from '../theme';
   import ActionButton from './ActionButton.svelte';
   import RemapDialog from './RemapDialog.svelte';
+  import { layer } from '../menuStack';
   import RulesEditor from './RulesEditor.svelte';
   import BoardEditor from './BoardEditor.svelte';
   import type { RulesPreset, RulesPresets } from '../../app/presets';
@@ -195,13 +196,20 @@
   <ActionButton label="Start game" glyph="confirm" primary disabled={!!problem} onclick={() => onstart($state.snapshot(seats), randomOrder, rulesId, boardId)} />
 </div>
 {#if editingBoard}
-  <BoardEditor presets={boards} selectedId={boardId} onselect={(id) => (boardId = id)} onclose={() => (editingBoard = false)} />
+  <div class="layer" use:layer={{ kind: 'menu', close: () => (editingBoard = false) }}>
+    <BoardEditor presets={boards} selectedId={boardId} onselect={(id) => (boardId = id)} onclose={() => (editingBoard = false)} />
+  </div>
 {/if}
 {#if editingRules}
-  <RulesEditor {presets} selectedId={rulesId} onselect={(id) => (rulesId = id)} onclose={() => (editingRules = false)} />
+  <div class="layer" use:layer={{ kind: 'menu', close: () => (editingRules = false) }}>
+    <RulesEditor {presets} selectedId={rulesId} onselect={(id) => (rulesId = id)} onclose={() => (editingRules = false)} />
+  </div>
 {/if}
 {#if remapping}
-  <RemapDialog {input} deviceId={remapping} onclose={() => (remapping = null)} />
+  <!-- RemapDialog ends input capture in onDestroy, so closing the layer is enough. -->
+  <div class="layer" use:layer={{ kind: 'dialog', close: () => (remapping = null) }}>
+    <RemapDialog {input} deviceId={remapping} onclose={() => (remapping = null)} />
+  </div>
 {/if}
 
 <style>
@@ -307,9 +315,11 @@
     cursor: pointer;
   }
   .seg.on {
-    background: var(--forest);
-    border-color: var(--forest);
-    color: var(--paper-hi);
+    background: #fff;
+    box-shadow: inset 0 0 0 3px var(--ink); /* selected: outline, never a fill (focus is the fill) */
+    color: var(--ink);
+    font-weight: 800;
+    border-color: var(--ink);
   }
   .pad {
     display: flex;

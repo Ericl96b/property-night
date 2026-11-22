@@ -26,8 +26,8 @@ describe('data migrations', () => {
     expect(await kv.get('presets', 'board-1')).toBeUndefined();
     expect(await kv.get('presets', 'rules-1')).toEqual({ id: 'rules-1', kind: 'rules', name: 'House rules' });
     expect(await kv.get('meta', 'benchmarks')).toEqual({ id: 'benchmarks', items: [{ score: 1 }] });
-    expect(await kv.get('meta', 'dataVersion')).toEqual({ id: 'dataVersion', value: 2 });
-    expect(DATA_VERSION).toBe(2);
+    expect(await kv.get('meta', 'dataVersion')).toEqual({ id: 'dataVersion', value: 3 });
+    expect(DATA_VERSION).toBe(3);
   });
 
   it('does nothing when run again', async () => {
@@ -39,11 +39,12 @@ describe('data migrations', () => {
     expect(await dump(kv)).toEqual(before);
   });
 
-  it('wipes when the stored version is older', async () => {
+  it.each([1, 2])('wipes when the stored version is %i', async (old) => {
     const kv = await seeded();
-    await kv.put('meta', { id: 'dataVersion', value: 1 });
+    await kv.put('meta', { id: 'dataVersion', value: old });
     await runMigrations(kv);
     expect(await kv.list('saves')).toEqual([]);
-    expect(await kv.get('meta', 'dataVersion')).toEqual({ id: 'dataVersion', value: 2 });
+    expect(await kv.get('presets', 'board-1')).toBeUndefined();
+    expect(await kv.get('meta', 'dataVersion')).toEqual({ id: 'dataVersion', value: 3 });
   });
 });

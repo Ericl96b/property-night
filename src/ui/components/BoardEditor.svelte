@@ -327,8 +327,10 @@
     cursor: pointer;
   }
   .tabs button.on {
-    background: var(--ink);
-    color: var(--paper-hi);
+    background: #fff;
+    box-shadow: inset 0 0 0 3px var(--ink); /* selected: outline, never a fill (focus is the fill) */
+    color: var(--ink);
+    font-weight: 800;
   }
   .link {
     border: 0;

@@ -1,6 +1,6 @@
 // Rules engine public API (SPEC §12). Pure: no rendering, no DOM.
 export { apply } from './apply';
-export { legalActions, manageActions, bidOptions, seatsToAct, BID_INCREMENTS } from './legal';
+export { legalActions, manageActions, bidOptions, bidChoices, seatsToAct, BID_INCREMENTS, type BidChoice } from './legal';
 export { newGame, cloneState, sidesFor, type NewGameConfig, type SeatConfig } from './state';
 export { checkInvariants } from './invariants';
 export { validateOffer, tradeTileBlocker } from './trade';

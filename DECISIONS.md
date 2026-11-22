@@ -305,7 +305,7 @@ The Pink and Yellow color groups trade places on the board. Spec: `docs/batch5/S
 | 27 | Honey Street → Peony Place | yellow → pink | 260 |
 | 29 | Buttercup Row → Rosewood Lane | yellow → pink | 280 |
 
-- **Colors:** yellow is now mustard `#D4A72C` and pink is bubblegum `#F569D7`, both with dark text. No other group changes. Board-order group lists (`CLASSIC_GROUPS` keys, `GROUP_ORDER`, `GROUP_IDS`, the batch3 plan's `GROUPS`) now run brown, light blue, yellow, orange, red, pink, green, dark blue. The group ids and labels are unchanged.
+- **Colors:** yellow is now mustard `#D4A72C` and pink is bubblegum `#F569D7`, both with dark text. No other group changes. *(Superseded by Stage 1 §4 below: yellow `#E3BC2A`, orange `#DC5A00`.)* Board-order group lists (`CLASSIC_GROUPS` keys, `GROUP_ORDER`, `GROUP_IDS`, the batch3 plan's `GROUPS`) now run brown, light blue, yellow, orange, red, pink, green, dark blue. The group ids and labels are unchanged.
 - **Prices stay with position, names travel with the group:** the cheaper second-row set (Yellow) keeps the old pink prices, rents and $100 houses. The third-row set (Pink) keeps the old yellow prices, rents and $150 houses.
 - **Cards stay position-based:** "Stroll down to {tile}" still moves to tile 11 and now reads "Goldfinch Lane". No card target changed.
 - **Buildings follow the group:** Villa Mediterranea / Hotel Miramar now stand on tiles 11/13/14, and the Painted Lady / The Rosemont on tiles 26/27/29, in the new colors. Designs, scale and rendering are unchanged.
@@ -316,3 +316,21 @@ The Pink and Yellow color groups trade places on the board. Spec: `docs/batch5/S
   - The comment in `batch3.mjs` now says yellow and green have no `i % 3 === 0` street (pink has tile 27). The Batch 3 note above stays as written.
   - No "Victorian = mid-low tier" note existed in this file, so nothing was marked superseded.
   - The spec moved, unchanged, to `docs/batch5/SPEC-color-swap.md`.
+
+## Stage 1 §4: tile colors (owner request, 2026-11-22)
+
+Orange becomes Tennessee Vols orange and the mustard set moves toward yellow so the two left-side sets can't be confused. Spec: `docs/property-night-stage1-spec.md` §4.
+
+- **Final values (single source, `CLASSIC_GROUPS` in `src/data/classicBoard.ts`):** orange **`#DC5A00`**, yellow (mustard) **`#E3BC2A`**, both with dark text. Bands, deeds, chips and the themed buildings all read from there; the `SETS` fallback accents in `buildingModels.js` match.
+- **Why orange isn't `#FF8200` in code:** the spec judges the color as rendered. Under the default ACES tone mapping and current lighting, a `#FF8200` band shows on screen as about `#FFC260` (light amber, right next to the mustard). `#DC5A00` shows as about `#FD9A49`, which reads as Vols orange. Measured from the canvas on the left side at default settings:
+
+  | Source hex | ACES (default) | AgX | Neutral |
+  | --- | --- | --- | --- |
+  | old orange `#F7941D` | `#FACC6D` | `#E5B382` | `#FA9C5D` |
+  | old mustard `#D4A72C` | `#EED476` | `#D6B880` | `#F6B846` |
+  | orange `#FF8200` (spec start) | `#FFC260` | `#EAAC7E` | `#FA9161` |
+  | **orange `#DC5A00`** | **`#FD9A49`** | `#E2936D` | `#F77246` |
+  | **mustard `#E3BC2A`** | **`#F1DD81`** | `#DBC288` | `#F8C451` |
+
+- **Trade-off:** the flat UI (deed headers, chips) shows the source hex unlit, so there the orange is a deeper, slightly burnt orange. Dark text stays legible on it. The mustard stays at the spec's starting point: once orange moved, no further push toward yellow was needed.
+- **Data wipe:** `DATA_VERSION` is 3. Saves and user board presets carry the old hexes, so they are wiped once more, the same way as Batch 5. `SAVE_VERSION` stays 2, so an exported save file from before this change still imports, with its old colors.

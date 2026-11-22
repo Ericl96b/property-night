@@ -13,4 +13,5 @@ export const TOKEN_NAMES: Record<TokenId, string> = {
   sailboat: 'Sailboat',
   umbrella: 'Umbrella',
   gramophone: 'Gramophone',
+  gummy: 'Gummy Bear',
 };

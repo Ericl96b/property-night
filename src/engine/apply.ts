@@ -931,6 +931,7 @@ export function apply(state: State, action: Action): ApplyResult {
       if (action.amount > s.players[seat].cash) fail('bids are capped at your cash');
       a.highBid = action.amount;
       a.highBidder = seat;
+      a.lastBids = { ...a.lastBids, [seat]: action.amount };
       c.ev.push({ type: 'bid', seat, amount: action.amount });
       log(c, seat, `${name(c, seat)} bid $${action.amount}`);
       checkAuctionEnd(c);

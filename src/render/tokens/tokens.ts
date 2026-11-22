@@ -23,6 +23,7 @@ import {
   toWorldX,
   toWorldY,
 } from './shapes';
+import { gummy } from './gummyBear';
 
 export type TokenId =
   | 'teacup'
@@ -33,9 +34,10 @@ export type TokenId =
   | 'crown'
   | 'sailboat'
   | 'umbrella'
-  | 'gramophone';
+  | 'gramophone'
+  | 'gummy';
 
-export const TOKEN_IDS: TokenId[] = ['teacup', 'key', 'bicycle', 'cat', 'rocket', 'crown', 'sailboat', 'umbrella', 'gramophone'];
+export const TOKEN_IDS: TokenId[] = ['teacup', 'key', 'bicycle', 'cat', 'rocket', 'crown', 'sailboat', 'umbrella', 'gramophone', 'gummy'];
 
 interface TokenParts {
   brass: THREE.BufferGeometry[];
@@ -389,6 +391,7 @@ const BUILDERS: Record<TokenId, () => TokenParts> = {
   sailboat,
   umbrella,
   gramophone,
+  gummy,
 };
 
 export interface TokenObject {
@@ -398,7 +401,7 @@ export interface TokenObject {
   setColor(color: string): void;
 }
 
-const figureCache = new Map<TokenId, TokenParts & { brassMerged: THREE.BufferGeometry; engravedMerged?: THREE.BufferGeometry }>();
+const figureCache = new Map<TokenId, TokenParts & { brassMerged?: THREE.BufferGeometry; engravedMerged?: THREE.BufferGeometry }>();
 
 export function buildToken(id: TokenId, color: string): TokenObject {
   let cached = figureCache.get(id);
@@ -406,14 +409,14 @@ export function buildToken(id: TokenId, color: string): TokenObject {
     const parts = BUILDERS[id]();
     cached = {
       ...parts,
-      brassMerged: merge(parts.brass),
+      brassMerged: parts.brass.length ? merge(parts.brass) : undefined,
       engravedMerged: parts.engraved ? merge(parts.engraved) : undefined,
     };
     figureCache.set(id, cached);
   }
   const group = new THREE.Group();
   group.name = `token-${id}`;
-  const figure = new THREE.Mesh(merge([cached.brassMerged, baseGeometry()]), brass(id === 'cat' || id === 'key' ? 0.3 : 0.27));
+  const figure = new THREE.Mesh(cached.brassMerged ? merge([cached.brassMerged, baseGeometry()]) : baseGeometry(), brass(id === 'cat' || id === 'key' ? 0.3 : 0.27));
   figure.castShadow = true;
   figure.receiveShadow = true;
   group.add(figure);

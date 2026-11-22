@@ -1278,9 +1278,9 @@ export const SETS = {
   brown: { label: 'Brown', color: 0x8b5a2b, props: [['Mediterranean Avenue', 60], ['Baltic Avenue', 60]], houseName: 'Cottage', hotelName: 'Roadside Inn', house: cottage, hotel: inn },
   lightBlue: { label: 'Light Blue', color: 0x86cfe8, props: [['Oriental Avenue', 100], ['Connecticut Avenue', 120]], houseName: 'Beach Bungalow', hotelName: 'Seaside Hotel', house: bungalow, hotel: seaside },
   pink: { label: 'Pink', color: 0xd6548f, props: [['St. Charles Place', 140], ['Virginia Avenue', 160]], houseName: 'Painted Lady', hotelName: 'The Rosemont', house: victorian, hotel: grandVictorian },
-  orange: { label: 'Orange', color: 0xf08a24, props: [['St. James Place', 180], ['New York Avenue', 200]], houseName: 'Brownstone', hotelName: 'Downtown Hotel', house: brownstone, hotel: cityHotel },
+  orange: { label: 'Orange', color: 0xdc5a00, props: [['St. James Place', 180], ['New York Avenue', 200]], houseName: 'Brownstone', hotelName: 'Downtown Hotel', house: brownstone, hotel: cityHotel },
   red: { label: 'Red', color: 0xd23a30, props: [['Kentucky Avenue', 220], ['Illinois Avenue', 240]], houseName: 'Alpine Chalet', hotelName: 'Ski Lodge', house: chalet, hotel: lodge },
-  yellow: { label: 'Yellow', color: 0xf0c232, props: [['Atlantic Avenue', 260], ['Marvin Gardens', 280]], houseName: 'Villa Mediterranea', hotelName: 'Hotel Miramar', house: medVilla, hotel: resort },
+  yellow: { label: 'Yellow', color: 0xe3bc2a, props: [['Atlantic Avenue', 260], ['Marvin Gardens', 280]], houseName: 'Villa Mediterranea', hotelName: 'Hotel Miramar', house: medVilla, hotel: resort },
   green: { label: 'Green', color: 0x2f9a6a, props: [['Pacific Avenue', 300], ['Pennsylvania Avenue', 320]], houseName: 'Georgian Manor', hotelName: 'The Pacific', house: georgian, hotel: beaux },
   darkBlue: { label: 'Dark Blue', color: 0x1f3d8c, props: [['Park Place', 350], ['Boardwalk', 400]], houseName: 'Modern Villa', hotelName: 'Art Deco Tower', house: villa, hotel: deco },
 };

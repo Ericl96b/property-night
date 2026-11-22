@@ -170,9 +170,9 @@
       {#if mode === 'respond'}
         <ActionButton label="Accept" glyph="confirm" primary onclick={() => onaccept?.()} />
         <ActionButton label="Counter" glyph="trade" onclick={() => oncounter?.()} />
-        <ActionButton label="Reject" glyph="back" onclick={() => onreject?.()} />
+        <ActionButton label="Reject" onclick={() => onreject?.()} />
       {:else}
-        <ActionButton label="Withdraw offer" glyph="back" onclick={() => oncancel?.()} />
+        <ActionButton label="Withdraw offer" onclick={() => oncancel?.()} />
       {/if}
     </div>
   {/if}
@@ -219,8 +219,10 @@
     cursor: pointer;
   }
   .who.sel {
-    background: var(--ink);
-    color: var(--paper-hi);
+    background: #fff;
+    box-shadow: inset 0 0 0 3px var(--ink); /* selected: outline, never a fill (focus is the fill) */
+    color: var(--ink);
+    font-weight: 800;
   }
   .cols {
     display: grid;

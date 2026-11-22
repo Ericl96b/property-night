@@ -38,8 +38,10 @@ export function startKeyboard(h: KeyboardHandlers): void {
   window.addEventListener('keydown', (e) => {
     const t = e.target;
     const typing = t instanceof HTMLInputElement && (t.type === 'text' || t.type === 'number');
-    if (typing && !['Escape', 'Enter'].includes(e.code)) return;
-    if (t instanceof HTMLSelectElement && e.code.startsWith('Arrow')) return;
+    // Arrows on selects and number fields go through the shared stepper driver (ui/focus.ts),
+    // so the keyboard behaves like the D-pad: up/down move, left/right change the value.
+    const numberArrow = t instanceof HTMLInputElement && t.type === 'number' && e.code.startsWith('Arrow');
+    if (typing && !numberArrow && !['Escape', 'Enter'].includes(e.code)) return;
     if (e.shiftKey && e.code.startsWith('Arrow')) {
       held.add(e.code);
       nudgeFromKeys();

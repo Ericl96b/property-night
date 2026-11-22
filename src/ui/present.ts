@@ -130,8 +130,7 @@ export function primaryButtons(s: State, actions: Action[]): ActionButton[] {
   if (out.length) {
     out[0].primary = true;
     out[0].glyph = 'confirm';
-    const back = out.find((b, i) => i > 0 && (b.action.type === 'decline' || b.action.type === 'rejectTrade' || b.action.type === 'cancelTrade'));
-    if (back) back.glyph = 'back';
+    // No Back glyph on decline/reject/cancel: Back never makes a game decision (Stage 1 §1).
   }
   return out;
 }

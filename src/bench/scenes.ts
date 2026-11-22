@@ -10,7 +10,8 @@ export type PresetId = 'empty' | 'allHouses' | 'allHotels' | 'worstCase' | 'oneG
 export type TokenCount = 0 | 2 | 6;
 
 export const GROUP_ORDER: GroupId[] = ['brown', 'lightBlue', 'yellow', 'orange', 'red', 'pink', 'green', 'darkBlue'];
-export const SANDBOX_TOKENS = ['teacup', 'key', 'bicycle', 'cat', 'rocket', 'crown'];
+// Seat 2 is the Gummy Bear so the 2-token view compares it directly with the teacup (Stage 1 §5).
+export const SANDBOX_TOKENS = ['teacup', 'gummy', 'bicycle', 'cat', 'rocket', 'crown'];
 /** Where tokens stand: one per side, two more, the sixth in jail. */
 const TOKEN_SPOTS = [1, 16, 21, 26, 37, 10];
 const JAILED = 5;

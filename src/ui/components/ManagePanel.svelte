@@ -214,9 +214,6 @@
     color: var(--ink);
     cursor: pointer;
   }
-  .op:hover:not(:disabled) {
-    background: #efe3c8;
-  }
   .op:disabled {
     opacity: 0.4;
     cursor: default;

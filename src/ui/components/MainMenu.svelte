@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import type { SaveFile, Saves } from '../../app/saves';
   import ActionButton from './ActionButton.svelte';
+  import { layer } from '../menuStack';
 
   let {
     saves,
@@ -56,6 +57,7 @@
       <input bind:this={fileInput} type="file" accept="application/json,.json" hidden onchange={importFile} />
     </div>
   {:else}
+    <div class="layer" use:layer={{ kind: 'menu', close: () => (loading = false) }}>
     <div class="slots">
       {#each list as f (f.id)}
         <div class="slot">
@@ -67,6 +69,7 @@
       {/each}
     </div>
     <ActionButton label="Back" glyph="back" onclick={() => (loading = false)} />
+    </div>
   {/if}
   {#if message}<div class="msg">{message}</div>{/if}
 </div>

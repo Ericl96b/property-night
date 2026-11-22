@@ -342,7 +342,7 @@ async function boot(): Promise<void> {
   const auto = params.get('auto');
   if (auto) {
     const kinds = auto.split(',').map((k) => (k === 'bank' ? 'bankBot' : k === 'bot' ? 'bot' : 'human')) as SeatConfig['kind'][];
-    const tokens = ['teacup', 'key', 'bicycle', 'cat', 'rocket', 'crown'];
+    const tokens = ['teacup', 'gummy', 'bicycle', 'cat', 'rocket', 'crown'];
     const colors = ['#7B3FE4', '#0F9C84', '#C0582B', '#5B6472', '#C8326E', '#2E7DD7'];
     const seats = kinds.map((kind, i) => ({ kind, name: kind === 'human' ? `Player ${i + 1}` : kind === 'bankBot' ? 'Bank' : `Bot ${i + 1}`, token: tokens[i], color: colors[i] }));
     startGame({ seats, seed: Number(params.get('seed') ?? 7), turnOrder: 'fixed' });

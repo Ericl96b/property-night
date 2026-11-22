@@ -3,7 +3,7 @@
 import type { KV } from './db';
 
 /** Current stored-data version, kept in the `meta` store under `dataVersion`. */
-export const DATA_VERSION = 2;
+export const DATA_VERSION = 3;
 const ID = 'dataVersion';
 
 interface VersionRecord {
@@ -13,7 +13,9 @@ interface VersionRecord {
 
 /**
  * Version 2 (Pink/Yellow swap): saves and user board presets describe the old layout, so they
- * are deleted. Rules presets and benchmark history stay. Running it again does nothing.
+ * are deleted. Version 3 (Stage 1 §4, Vols orange and yellower mustard): saves and user board
+ * presets carry the old group colors, so they are deleted again. Every bump runs the same wipe.
+ * Rules presets and benchmark history stay. Running it again does nothing.
  */
 export async function runMigrations(kv: KV): Promise<void> {
   const rec = await kv.get<VersionRecord>('meta', ID);

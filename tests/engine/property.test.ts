@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apply, legalActions, liquidationValue, unmortgageCost } from '../../src/engine';
+import { apply, bidChoices, legalActions, liquidationValue, unmortgageCost } from '../../src/engine';
 import { act, edit, game, own, run, withDice } from './helpers';
 
 // Tile ids used below: 1 Hazel (brown $60), 3 Briar (brown $60), 5 North Line, 6/8/9 light blue,
@@ -47,6 +47,32 @@ describe('auctions', () => {
     expect(s.players[2].cash).toBe(1480);
     expect(s.players[2].stats.auctionBuys).toBe(1);
     expect(s.phase).toBe('postRoll');
+  });
+
+  it("records each seat's latest bid for the Outbid status, fresh per auction", () => {
+    const s0 = auction();
+    expect(s0.auction!.lastBids).toBeUndefined();
+    const s = run(s0, { type: 'bid', seat: 1, amount: 10 }, { type: 'bid', seat: 2, amount: 20 }, { type: 'bid', seat: 1, amount: 30 }).s;
+    expect(s.auction!.lastBids).toEqual({ 1: 30, 2: 20 });
+    expect(s0.auction!.lastBids).toBeUndefined(); // the earlier state is untouched
+  });
+
+  it('bid choices state the resulting total, include unaffordable raises, and vanish for the leader', () => {
+    const s0 = edit(auction(), (d) => (d.players[1].cash = 75));
+    expect(bidChoices(s0, 1)).toEqual([
+      { amount: 1, raise: 1, affordable: true },
+      { amount: 10, raise: 10, affordable: true },
+      { amount: 50, raise: 50, affordable: true },
+      { amount: 100, raise: 100, affordable: false },
+    ]);
+    const s1 = act(s0, { type: 'bid', seat: 2, amount: 20 }).s;
+    expect(bidChoices(s1, 1).map((c) => [c.amount, c.raise, c.affordable])).toEqual([
+      [21, 1, true],
+      [30, 10, true],
+      [70, 50, true],
+      [120, 100, false],
+    ]);
+    expect(bidChoices(s1, 2)).toEqual([]); // leading: can't outbid yourself
   });
 
   it('bids must beat the high bid and are capped at cash', () => {

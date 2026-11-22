@@ -64,8 +64,8 @@ export interface BoardData {
 export const CLASSIC_GROUPS: Record<GroupId, Group> = {
   brown: { id: 'brown', color: '#955436', lightText: true },
   lightBlue: { id: 'lightBlue', color: '#AAE0FA', lightText: false },
-  yellow: { id: 'yellow', color: '#D4A72C', lightText: false },
-  orange: { id: 'orange', color: '#F7941D', lightText: false },
+  yellow: { id: 'yellow', color: '#E3BC2A', lightText: false },
+  orange: { id: 'orange', color: '#DC5A00', lightText: false },
   red: { id: 'red', color: '#ED1B24', lightText: false },
   pink: { id: 'pink', color: '#F569D7', lightText: false },
   green: { id: 'green', color: '#1FB25A', lightText: false },

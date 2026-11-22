@@ -29,6 +29,32 @@ export function manageActions(s: State, seat: number): Action[] {
   return out;
 }
 
+export interface BidChoice {
+  /** The total that will be bid. */
+  amount: number;
+  /** The raise over the current high bid (the opening bid before any bids). */
+  raise: number;
+  affordable: boolean;
+}
+
+/**
+ * Every raise a seat could make, smallest first, including ones it can't afford (the UI shows
+ * those disabled with the reason). Empty when the seat isn't bidding or already leads.
+ */
+export function bidChoices(s: State, seat: number): BidChoice[] {
+  const a = s.auction;
+  if (!a || !a.active.includes(seat) || a.highBidder === seat) return [];
+  const cash = s.players[seat].cash;
+  const base = a.highBidder === null ? 0 : a.highBid; // opening bid = the increment (at least the minimum)
+  const out: BidChoice[] = [];
+  for (const inc of BID_INCREMENTS) {
+    const amount = Math.max(a.minBid, base + inc);
+    if (amount <= a.highBid || out.some((c) => c.amount === amount)) continue;
+    out.push({ amount, raise: amount - base, affordable: amount <= cash });
+  }
+  return out.sort((x, y) => x.amount - y.amount);
+}
+
 export function bidOptions(s: State, seat: number): number[] {
   const a = s.auction;
   if (!a || !a.active.includes(seat)) return [];

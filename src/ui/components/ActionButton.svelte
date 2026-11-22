@@ -40,20 +40,16 @@
     box-shadow: inset 0 0 0 1.5px rgba(43, 33, 25, 0.18);
     text-align: left;
   }
-  .btn:hover:not(:disabled) {
-    background: #efe3c8;
-  }
   .btn:disabled {
     opacity: 0.45;
     cursor: default;
   }
+  /* Recommended/default option: accent outline and label, never a solid fill (Stage 1 §2B).
+     Focus (style.css) is the only solid fill. */
   .primary {
-    background: var(--forest);
-    color: var(--paper-hi);
-    box-shadow: none;
-  }
-  .primary:hover:not(:disabled) {
-    background: #28503c;
+    color: var(--forest);
+    font-weight: 800;
+    box-shadow: inset 0 0 0 3px var(--forest);
   }
   img,
   .spacer,

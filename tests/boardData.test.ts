@@ -44,7 +44,8 @@ describe('classic board data', () => {
       { name: 'Peony Place', group: 'pink', price: 260, rents: high, houseCost: 150 },
       { name: 'Rosewood Lane', group: 'pink', price: 280, rents: [24, 120, 360, 850, 1025, 1200], houseCost: 150 },
     ]);
-    expect(CLASSIC_BOARD.groups.yellow).toEqual({ id: 'yellow', color: '#D4A72C', lightText: false });
+    expect(CLASSIC_BOARD.groups.yellow).toEqual({ id: 'yellow', color: '#E3BC2A', lightText: false });
+    expect(CLASSIC_BOARD.groups.orange).toEqual({ id: 'orange', color: '#DC5A00', lightText: false });
     expect(CLASSIC_BOARD.groups.pink).toEqual({ id: 'pink', color: '#F569D7', lightText: false });
     expect(Object.keys(CLASSIC_BOARD.groups)).toEqual(['brown', 'lightBlue', 'yellow', 'orange', 'red', 'pink', 'green', 'darkBlue']);
   });

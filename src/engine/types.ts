@@ -102,6 +102,8 @@ export interface Auction {
   kind?: 'property' | 'house' | 'hotel';
   /** Building auctions: where each bidder would build if they win (seat → tile). */
   buildFor?: Record<number, number>;
+  /** Each seat's latest bid in this auction (seat → amount), for the "Outbid" status. */
+  lastBids?: Record<number, number>;
 }
 
 /** Speed die faces: 1–3 are numbers, 4 and 5 are the bus, 6 is the "Mr. Monopoly" face. */

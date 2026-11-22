@@ -4,6 +4,7 @@
   import type { State } from '../../engine';
   import type { Settings } from '../../app/settings';
   import ActionButton from './ActionButton.svelte';
+  import { layer } from '../menuStack';
 
   let {
     gs,
@@ -44,7 +45,7 @@
 <div class="panel pause">
   <div class="eyebrow">Paused</div>
   {#if confirm}
-    <div class="confirm">
+    <div class="confirm" use:layer={{ kind: 'dialog', close: () => (confirm = null) }}>
       {#if confirm.kind === 'forfeit'}
         <div class="q">Forfeit {gs?.seats[confirm.seat].name}? Their cash returns to the bank, buildings are sold back and every deed is auctioned.</div>
         <ActionButton label="Yes, forfeit" glyph="confirm" primary onclick={() => { const c = confirm; confirm = null; if (c?.kind === 'forfeit') onforfeit(c.seat); }} />

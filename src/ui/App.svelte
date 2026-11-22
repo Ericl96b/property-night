@@ -1,13 +1,14 @@
 <script lang="ts">
   // Overlay root: fixed 1920 × 1080 logical stage, scaled uniformly (SPEC §10.8).
   import { onMount, setContext } from 'svelte';
-  import { BID_INCREMENTS, type Action, type SeatConfig } from '../engine';
+  import type { Action, SeatConfig } from '../engine';
   import type { GameController, GameView } from '../app/controller';
   import type { Settings } from '../app/settings';
   import type { Intent } from '../input/keys';
   import { decide } from '../app/ownership';
   import { glyphFamily, type InputManager, type PadInfo } from '../input/manager';
-  import { cycleFocus, moveFocus, type Dir } from './focus';
+  import { activate, cycleFocus, defaultFocus, focusEl, hoverFocus, isStepper, moveFocus, stepControl, type Dir } from './focus';
+  import { back as stackBack, hooks as stackHooks, layer, topLayer } from './menuStack';
   import { stageFit } from './stage';
   import { SPEED_FACTOR } from '../director/queue';
   import LogPanel from './components/LogPanel.svelte';
@@ -80,7 +81,6 @@
   let offset = $state({ x: 0, y: 0 });
   let manageSeat = $state<number | null>(null);
   let paused = $state(false);
-  let incIndex = $state<Record<number, number>>({});
   let cashOverride = $state<number[] | null>(null);
   let shake = $state<number | null>(null);
   let lastMoment: unknown = null;
@@ -93,7 +93,6 @@
     onnewgame();
   }
   let waitingSeat = $state<number | null>(null);
-  let navFocus = false;
   let loanSeat = $state<number | null>(null);
   let screen = $state<'menu' | 'setup' | 'testboard'>('menu');
 
@@ -171,6 +170,7 @@
     const unsub = controller.subscribe((v) => {
       view = v;
       started = !!v.state;
+      ensureFocus();
       if (v.moment !== lastMoment) {
         lastMoment = v.moment;
         if (v.moment?.kind === 'payment' || v.moment?.kind === 'transfer') tickCash(v.moment.before, v.moment.after, v.moment.duration, typeof v.moment.from === 'number' ? v.moment.from : null);
@@ -185,9 +185,13 @@
     };
     fit();
     window.addEventListener('resize', fit);
+    // Mouse hover moves the same single focus as the controller.
+    const over = (e: PointerEvent) => hoverFocus(e.target, topPanel());
+    document.addEventListener('pointerover', over);
     return () => {
       unsub();
       window.removeEventListener('resize', fit);
+      document.removeEventListener('pointerover', over);
     };
   });
 
@@ -274,43 +278,53 @@
 
   function setPaused(p: boolean) {
     paused = p;
+    if (!p) savingOpen = false; // closing the pause menu closes its submenus too
     controller.setPaused(p);
   }
 
-  function bidAmount(seat: number): number | null {
-    const a = gs!.auction!;
-    const inc = BID_INCREMENTS[incIndex[seat] ?? 1];
-    const base = a.highBidder === null ? 0 : a.highBid; // opening bid = the increment (at least the minimum)
-    const amt = Math.max(a.minBid, base + inc);
-    return amt <= gs!.players[seat].cash ? amt : null;
+  /** Navigation scope: the top layer of the menu stack (menuStack.ts). */
+  function topPanel(): Element | null {
+    return topLayer()?.el ?? null;
   }
 
-  const PANELS = ['.benchp', '.testb', '.remap', '.savep', '.pause', '.padlost', '.statsp', '.logp', '.loans', '.trade', '.manage', '.auction', '.setup', '.context', '.banner'];
-  function topPanel(): Element | null {
-    const stage = document.querySelector('.stage');
-    if (!stage) return null;
-    for (const sel of PANELS) {
-      const el = stage.querySelector(sel);
-      if (el) return el;
-    }
-    return null;
+  // One focus (Stage 1 §2): every layer starts on its default item, and whenever the top layer
+  // has no focused item (opened, closed, or its buttons re-rendered) focus goes to its default.
+  let ensureTimer: ReturnType<typeof setTimeout> | undefined;
+  function ensureFocus() {
+    clearTimeout(ensureTimer);
+    ensureTimer = setTimeout(() => {
+      const p = topPanel();
+      if (!p) return;
+      const a = document.activeElement;
+      if (a && a !== document.body && a.isConnected && p.contains(a)) return;
+      const d = defaultFocus(p);
+      if (d) focusEl(d);
+    }, 0);
   }
+  stackHooks.opened = ensureFocus;
+  stackHooks.closed = ensureFocus;
 
   /** D-pad / arrows move focus; Confirm then clicks the focused control. */
   function navigate(i: Intent): boolean {
+    const panel = topPanel();
+    const a = document.activeElement as HTMLElement | null;
+    const onStepper = !!panel && !!a && panel.contains(a) && isStepper(a);
+    // L1/R1 (Q/E) step the focused stepper; otherwise they are left to the screen.
+    if (i === 'cycleLeft' || i === 'cycleRight') return onStepper && stepControl(a!, i === 'cycleRight' ? 1 : -1);
     const dir = ({ navUp: 'up', navDown: 'down', navLeft: 'left', navRight: 'right' } as Record<string, Dir>)[i];
     if (!dir) return false;
-    const panel = topPanel();
-    if (panel && moveFocus(panel, dir)) navFocus = true;
+    if (!panel) return true;
+    // Left/right change a focused stepper's value; at the end of its range they move on.
+    if (onStepper && (dir === 'left' || dir === 'right') && stepControl(a!, dir === 'right' ? 1 : -1)) return true;
+    moveFocus(panel, dir);
     return true;
   }
 
   function clickFocused(): boolean {
     const el = document.activeElement as HTMLElement | null;
     const panel = topPanel();
-    if (!navFocus || !el || !panel || !panel.contains(el) || !(el instanceof HTMLButtonElement) || el.disabled) return false;
-    el.click();
-    return true;
+    if (!el || !panel || !panel.contains(el)) return false;
+    return activate(el);
   }
 
   /** A bound controller for a human seat disconnected: pause until it returns. */
@@ -335,7 +349,7 @@
   function testBoardIntent(i: Intent, t: TestBoard): boolean {
     switch (i) {
       case 'back':
-        exitTestBoard();
+        stackBack();
         return true;
       case 'navLeft':
       case 'navRight':
@@ -344,7 +358,7 @@
       case 'navUp':
       case 'navDown': {
         const panel = document.querySelector('.stage .testb');
-        if (panel && cycleFocus(panel, i === 'navDown' ? 1 : -1)) navFocus = true;
+        if (panel) cycleFocus(panel, i === 'navDown' ? 1 : -1);
         return true;
       }
       case 'cycleLeft':
@@ -371,7 +385,7 @@
   export function intent(i: Intent, deviceSeat: number | null = null): boolean {
     if (benchOpen && !started) {
       if (i === 'back') {
-        benchPanel?.back();
+        stackBack();
         return true;
       }
       if (benchRunning) return true;
@@ -381,7 +395,8 @@
     }
     if (screen === 'testboard' && tb && !started) return testBoardIntent(i, tb);
     if (!started || !view || !gs) {
-      // Setup screen: navigation and Confirm on the focused control.
+      // Menus and setup: navigation, Confirm on the focused control, Back pops one level.
+      if (i === 'back') return stackBack();
       if (navigate(i)) return true;
       if (i === 'confirm') return clickFocused();
       return false;
@@ -400,7 +415,7 @@
     if (paused) {
       if (navigate(i)) return true;
       if (i === 'confirm') return clickFocused();
-      if (i === 'back') setPaused(false);
+      if (i === 'back') stackBack(); // Save → pause menu → game, a confirm dialog cancels
       return true;
     }
     if (i === 'log') {
@@ -408,13 +423,14 @@
       return true;
     }
     if (logOpen) {
-      if (i === 'back') logOpen = false;
+      if (i === 'back') stackBack();
       return true;
     }
     if (statsOpen) {
       if (navigate(i)) return true;
       if (i === 'confirm' && !clickFocused()) toMenu();
-      if (i === 'back' || i === 'manage') statsOpen = false;
+      if (i === 'back') stackBack();
+      else if (i === 'manage') statsOpen = false;
       return true;
     }
     if (view.busy || view.card || view.moment) {
@@ -427,52 +443,39 @@
     const d = decide(gs, deviceSeat, i);
     if (!d.allowed || d.seat === null) return true; // other players' controllers are read-only here
     const seat = d.seat;
+    // Back closes the top menu one level; on a game decision (buy, auction, trade reply, debt)
+    // it does nothing — those need the option chosen and confirmed (Stage 1 §1).
+    if (i === 'back') {
+      stackBack();
+      return true;
+    }
+    // A bid menu belongs to one seat ([data-bid-seat]): a bound controller's first D-pad press jumps
+    // into its own menu, and it can never confirm another player's bid (§3C).
+    const owned = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('[data-bid-seat]');
+    if (deviceSeat !== null && gs.phase === 'auction') {
+      const mine = document.querySelector<HTMLElement>(`.stage [data-bid-seat="${seat}"]`);
+      if (mine && !mine.contains(document.activeElement) && i.startsWith('nav')) {
+        const d = defaultFocus(mine);
+        if (d) focusEl(d);
+        return true;
+      }
+      if (i === 'confirm' && owned && Number(owned.dataset.bidSeat) !== seat) return true;
+    }
     if (navigate(i)) return true;
-    if (i === 'confirm' && clickFocused()) {
-      navFocus = false;
-      return true;
-    }
-    navFocus = false;
-    if (gs.phase === 'auction') {
-      if (gs.seats[seat].kind !== 'human') return true;
-      if (i === 'cycleLeft' || i === 'cycleRight') {
-        const cur = incIndex[seat] ?? 1;
-        incIndex = { ...incIndex, [seat]: (cur + (i === 'cycleRight' ? 1 : BID_INCREMENTS.length - 1)) % BID_INCREMENTS.length };
-        return true;
-      }
-      if (i === 'confirm') {
-        const amt = bidAmount(seat);
-        if (amt !== null && gs.auction!.highBidder !== seat) act({ type: 'bid', seat, amount: amt });
-        return true;
-      }
-      if (i === 'back') {
-        if (gs.auction!.highBidder !== seat) act({ type: 'pass', seat });
-        return true;
-      }
-      return true;
-    }
+    if (i === 'confirm' && clickFocused()) return true;
+    // Bidding is menu-based (§3): focus an option and confirm it. Nothing else bids or passes.
+    if (gs.phase === 'auction') return true;
     if (manageSeat !== null) {
-      if (i === 'back' || i === 'manage') {
-        manageSeat = null;
-        return true;
-      }
+      if (i === 'manage') manageSeat = null;
       return true;
     }
-    if (compose) {
-      if (i === 'back') compose = null;
-      return true;
-    }
-    if (loanSeat !== null) {
-      if (i === 'back') loanSeat = null;
-      return true;
-    }
+    if (compose || loanSeat !== null) return true;
     if (gs.phase === 'trade') {
       const t = gs.trade!;
       if (seat === t.to && gs.seats[seat].kind === 'human') {
         if (i === 'confirm') act({ type: 'acceptTrade', seat });
-        else if (i === 'back') act({ type: 'rejectTrade', seat });
         else if (i === 'trade') openTrade(seat);
-      } else if (seat === t.from && i === 'back') act({ type: 'cancelTrade', seat });
+      }
       return true;
     }
     if (i === 'trade') {
@@ -497,11 +500,6 @@
       act(buttons[0].action);
       return true;
     }
-    if (i === 'back') {
-      const b = buttons.find((x) => x.glyph === 'back');
-      if (b) act(b.action);
-      return true;
-    }
     return false;
   }
 </script>
@@ -510,21 +508,31 @@
   {#if !started || !view || !gs}
     {#if screen === 'testboard' && tb}
       {#if !benchOpen}
-        <TestBoardControls {tb} v={tbV} {boards} detailed={tbDetailed} ondetailed={(on) => (tbDetailed = on)} onbenchmark={() => openBench('testboard')} onexit={exitTestBoard} />
+        <div class="layer" use:layer={{ kind: 'menu', close: exitTestBoard }}>
+          <TestBoardControls {tb} v={tbV} {boards} detailed={tbDetailed} ondetailed={(on) => (tbDetailed = on)} onbenchmark={() => openBench('testboard')} onexit={exitTestBoard} />
+        </div>
       {/if}
     {:else if screen === 'menu'}
       {#if !benchOpen}
-        <MainMenu {saves} {oncontinue} onnew={() => (screen = 'setup')} onload={onloadsave} {onimport} onsettings={() => (menuSettings = true)} ontestboard={openTestBoard} />
+        <div class="layer" use:layer={{ kind: 'root' }}>
+          <MainMenu {saves} {oncontinue} onnew={() => (screen = 'setup')} onload={onloadsave} {onimport} onsettings={() => (menuSettings = true)} ontestboard={openTestBoard} />
+        </div>
       {/if}
       {#if menuSettings}
-        <PauseMenu gs={null} {settings} onsetting={setSetting} onresume={() => (menuSettings = false)} onforfeit={() => {}} onnewgame={() => {}} {onfullscreen} onbenchmark={() => openBench('menu')} />
+        <div class="layer" use:layer={{ kind: 'menu', close: () => (menuSettings = false) }}>
+          <PauseMenu gs={null} {settings} onsetting={setSetting} onresume={() => (menuSettings = false)} onforfeit={() => {}} onnewgame={() => {}} {onfullscreen} onbenchmark={() => openBench('menu')} />
+        </div>
       {/if}
     {:else}
-      <Setup {onstart} {input} {pads} {presets} {boards} />
-      <button class="menuback" onclick={() => (screen = 'menu')}>‹ Main menu</button>
+      <div class="layer" use:layer={{ kind: 'menu', close: () => (screen = 'menu') }}>
+        <Setup {onstart} {input} {pads} {presets} {boards} />
+        <button class="menuback" data-focus-key="menuback" onclick={() => (screen = 'menu')}>‹ Main menu</button>
+      </div>
     {/if}
     {#if benchOpen}
-      <BenchmarkPanel bind:this={benchPanel} {perf} onclose={closeBench} onrunning={(on) => (benchRunning = on)} />
+      <div class="layer" use:layer={{ kind: 'menu', close: () => benchPanel?.back() }}>
+        <BenchmarkPanel bind:this={benchPanel} {perf} onclose={closeBench} onrunning={(on) => (benchRunning = on)} />
+      </div>
     {/if}
     {#if benchState && view?.moment}
       {#key view.moment}
@@ -533,6 +541,7 @@
     {/if}
   {:else}
     <PlayerCards players={players(gs)} {cashOverride} {shake} />
+    <div class="layer" use:layer={{ kind: 'decision' }}>
     <ContextPanel {gs} {actions} busy={view.busy} {actingName} error={view.error} onaction={act}>
       {#snippet extra()}
         {#if manageable && gs.phase !== 'debt'}
@@ -555,21 +564,25 @@
         {/if}
       {/snippet}
     </ContextPanel>
+    </div>
     {#if gs.phase === 'auction' && !view.busy}
+      <div class="layer" use:layer={{ kind: 'decision' }}>
       <AuctionPanel
         {gs}
         deadline={view.auctionDeadline}
         humans={auctionHumans}
-        {incIndex}
         busy={view.busy}
         onbid={(seat, amount) => act({ type: 'bid', seat, amount })}
         onpass={(seat) => act({ type: 'pass', seat })}
-        oninc={(seat, k) => (incIndex = { ...incIndex, [seat]: k })}
       />
+      </div>
     {/if}
     {#if compose && !view.busy}
-      <TradePanel {gs} mode="compose" seat={compose.seat} initial={compose.initial} counter={compose.counter} onsubmit={submitTrade} oncancel={() => (compose = null)} />
+      <div class="layer" use:layer={{ kind: 'menu', close: () => (compose = null) }}>
+        <TradePanel {gs} mode="compose" seat={compose.seat} initial={compose.initial} counter={compose.counter} onsubmit={submitTrade} oncancel={() => (compose = null)} />
+      </div>
     {:else if gs.phase === 'trade' && !view.busy}
+      <div class="layer" use:layer={{ kind: 'decision' }}>
       {#if gs.seats[gs.trade!.to].kind === 'human'}
         <TradePanel {gs} mode="respond" seat={gs.trade!.to}
           onaccept={() => act({ type: 'acceptTrade', seat: gs.trade!.to })}
@@ -578,22 +591,32 @@
       {:else}
         <TradePanel {gs} mode="waiting" seat={gs.trade!.from} oncancel={() => act({ type: 'cancelTrade', seat: gs.trade!.from })} />
       {/if}
+      </div>
     {/if}
     {#if panelSeat !== null && !view.busy}
-      <ManagePanel {gs} seat={panelSeat} busy={view.busy} onaction={act} onclose={() => (manageSeat = null)} onloan={() => (loanSeat = panelSeat)} />
+      <!-- Raising money for a debt is a game decision; managing on your turn is a menu. -->
+      <div class="layer" use:layer={debtSeat !== null ? { kind: 'decision' } : { kind: 'menu', close: () => (manageSeat = null) }}>
+        <ManagePanel {gs} seat={panelSeat} busy={view.busy} onaction={act} onclose={() => (manageSeat = null)} onloan={() => (loanSeat = panelSeat)} />
+      </div>
     {/if}
     {#if loanSeat !== null && !view.busy}
-      <LoanPanel {gs} seat={loanSeat} onaction={(a) => { const err = controller.dispatch(a); if (!err && a.type === 'takeLoan') loanSeat = null; }} onclose={() => (loanSeat = null)} />
+      <div class="layer" use:layer={{ kind: 'menu', close: () => (loanSeat = null) }}>
+        <LoanPanel {gs} seat={loanSeat} onaction={(a) => { const err = controller.dispatch(a); if (!err && a.type === 'takeLoan') loanSeat = null; }} onclose={() => (loanSeat = null)} />
+      </div>
     {/if}
     {#if logOpen}
-      <LogPanel {gs} onclose={() => (logOpen = false)} />
+      <div class="layer" use:layer={{ kind: 'menu', close: () => (logOpen = false) }}>
+        <LogPanel {gs} onclose={() => (logOpen = false)} />
+      </div>
     {/if}
     {#if waitingSeat !== null}
+      <div class="layer" use:layer={{ kind: 'decision' }}>
       <div class="dimall"></div>
       <div class="panel padlost">
         <div class="pl-title">{gs.seats[waitingSeat].name}: reconnect controller</div>
         <div class="pl-sub">The game is paused until the same controller is back.</div>
         <ActionButton label="Continue with keyboard and mouse" onclick={() => { waitingSeat = null; controller.setPaused(paused); }} />
+      </div>
       </div>
     {/if}
     {#if view.card}
@@ -605,7 +628,7 @@
       {/key}
     {/if}
     {#if gs.phase === 'gameOver'}
-      <div class="center">
+      <div class="center" use:layer={{ kind: 'decision' }}>
         <div class="panel banner">
           <div class="eyebrow">Game over</div>
           <div class="big">{gameOverText(gs).title}</div>
@@ -617,11 +640,14 @@
         </div>
       </div>
       {#if statsOpen}
-        <StatsPanel {gs} onclose={() => (statsOpen = false)} onmenu={toMenu} />
+        <div class="layer" use:layer={{ kind: 'menu', close: () => (statsOpen = false) }}>
+          <StatsPanel {gs} onclose={() => (statsOpen = false)} onmenu={toMenu} />
+        </div>
       {/if}
     {/if}
     <button class="menu" aria-label="Pause menu" onclick={() => setPaused(true)}><img src={symbolUrl('ui-menu')} alt="" /></button>
     {#if paused}
+      <div class="layer" use:layer={{ kind: 'menu', close: () => setPaused(false) }}>
       <PauseMenu
         {gs}
         {settings}
@@ -634,8 +660,11 @@
         onbenchmark={() => {}}
       />
       {#if savingOpen}
-        <SavePanel {saves} onsave={onsaveslot} {onexport} onclose={() => (savingOpen = false)} />
+        <div class="layer" use:layer={{ kind: 'menu', close: () => (savingOpen = false) }}>
+          <SavePanel {saves} onsave={onsaveslot} {onexport} onclose={() => (savingOpen = false)} />
+        </div>
       {/if}
+      </div>
     {/if}
   {/if}
   {#if perfMode !== 'off'}
