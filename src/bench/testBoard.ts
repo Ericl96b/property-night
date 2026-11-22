@@ -63,7 +63,7 @@ export class TestBoard {
   enter(): void {
     const cam = this.scene.camera;
     this.savedCamera = { ...cam.settings };
-    cam.settings = { rotation: true, follow: true, reduceMotion: false };
+    cam.settings = { rotation: true, follow: true, reduceMotion: false, style: 'table' };
     cam.setFollow(null);
     cam.toSide(0, true);
     applyPreset(this.state, this.preset, this.group);

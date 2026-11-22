@@ -6,6 +6,8 @@ import type { QualitySetting } from '../render/quality';
 export interface Settings {
   speed: Speed;
   reduceMotion: boolean;
+  /** Stage 2: Close-up (default) or Table. Board rotation and Camera follow apply to Table only. */
+  cameraStyle: CameraStyleSetting;
   boardRotation: boolean;
   cameraFollow: boolean;
   quality: QualitySetting;
@@ -29,11 +31,14 @@ export interface Settings {
 
 export type PerfOverlaySetting = 'off' | 'fps' | 'detailed';
 
+export type CameraStyleSetting = 'closeup' | 'table';
+
 export type ToneMappingSetting = 'aces' | 'agx' | 'neutral';
 
 export const DEFAULT_SETTINGS: Settings = {
   speed: 'normal',
   reduceMotion: false,
+  cameraStyle: 'closeup',
   boardRotation: true,
   cameraFollow: true,
   quality: 'auto',

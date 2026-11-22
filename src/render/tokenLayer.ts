@@ -17,7 +17,11 @@ export interface PlacedToken {
   tile: number;
 }
 
-export type FollowFn = (token: THREE.Vector3 | null, destination?: THREE.Vector3) => void;
+/**
+ * Camera follow callback. `hops` (travel only) is how far along the path the token is, in tiles
+ * (0 at the start, path.length on arrival); the close-up chase camera uses it.
+ */
+export type FollowFn = (token: THREE.Vector3 | null, destination?: THREE.Vector3, hops?: number) => void;
 
 export class TokenLayer {
   readonly group = new THREE.Group();
@@ -164,7 +168,7 @@ export class TokenLayer {
           }
           g.position.lerpVectors(pts[seg], pts[seg + 1], t);
           g.position.y = BOARD_TOP + HOP_HEIGHT * 4 * t * (1 - t);
-          follow?.(g.position, dest);
+          follow?.(g.position, dest, seg + t);
           return true;
         };
       },

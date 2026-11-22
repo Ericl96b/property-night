@@ -19,3 +19,22 @@ export function boardMaxNdcX(w: number, h: number): number {
   const { scale, offset } = stageFit(w, h);
   return 1 - (2 * (offset.x + (PANEL_INNER_PX + BOARD_MARGIN_PX) * scale)) / w;
 }
+
+/**
+ * Stage 2: logical px kept clear at the top for moment banners (they start at 120 px and are
+ * ≈110 px tall) and at the bottom. Close-up shots keep their subject inside what is left.
+ */
+export const BANNER_ZONE_PX = 230;
+export const BOTTOM_MARGIN_PX = 48;
+
+/** The free screen region between the side panels, below the banner zone, in NDC. */
+export function safeAreaNdc(w: number, h: number): { xMin: number; xMax: number; yMin: number; yMax: number } {
+  const { scale, offset } = stageFit(w, h);
+  const xMax = boardMaxNdcX(w, h);
+  return {
+    xMin: -xMax,
+    xMax,
+    yMin: -1 + (2 * (offset.y + BOTTOM_MARGIN_PX * scale)) / h,
+    yMax: 1 - (2 * (offset.y + BANNER_ZONE_PX * scale)) / h,
+  };
+}

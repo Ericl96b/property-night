@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { BOARD_TOP, IN_JAIL, SIDE_YAW, sideOfTile, tileFrame, tileLocalToWorld, type Side } from '../render/layout';
 import { placeFlat, simulateThrow } from '../render/diceSim';
 import type { GameScene } from '../render/scene';
+import { CLOSEUP, type ShotPose } from '../render/cameraDirector';
 import type { TokenId } from '../render/tokens/tokens';
 import { Rng } from '../engine/rng';
 import { groupTiles, type Creditor, type GameEvent, type State } from '../engine';
@@ -123,6 +124,51 @@ export class Director implements DirectorLike {
 
   private follow = (token: THREE.Vector3 | null, destination?: THREE.Vector3) => this.scene.camera.setFollow(token, destination);
 
+  /** Close-up chase: the token's hops drive the camera (Stage 2 section 2.3). */
+  private chaseFollow(from: number, dir: 1 | -1) {
+    return (token: THREE.Vector3 | null, _dest?: THREE.Vector3, hops?: number) => {
+      if (!token || hops === undefined) return;
+      this.scene.camera.chase({ s: from + dir * hops, dir, token });
+    };
+  }
+
+  /**
+   * Close-up camera move as a queue item (Stage 2 section 2.6). `start` sets the goal (and turns
+   * the side yaw / light rig when `side` is given); a blocking item waits until the camera has
+   * covered `gate` of the move; `finish` snaps, so skip and Instant land on the end state.
+   */
+  private cameraShot(label: string, pose: () => ShotPose, opts: { smooth: number; side?: Side; block?: boolean; gate?: number }): Animation {
+    const cam = this.scene.camera;
+    return {
+      label,
+      start: () => {
+        if (opts.side !== undefined) cam.toSide(opts.side, this.speed === Infinity);
+        cam.shot(pose(), opts.smooth, this.speed === Infinity);
+        if (!opts.block) return;
+        const gate = opts.gate ?? 0.99;
+        return () => cam.progress() < gate;
+      },
+      finish: () => {
+        if (opts.side !== undefined) cam.toSide(opts.side, true);
+        cam.settle();
+      },
+    };
+  }
+
+  /**
+   * Put the camera on the active seat's view without animating (new game, resume, camera style
+   * or reduce motion changed): the Home shot in Close-up, the side turn in Table.
+   */
+  resetCamera(state: State, side?: Side): void {
+    const cam = this.scene.camera;
+    const p = state.players[state.turn.seat];
+    const tile = p.jail ? IN_JAIL : p.position;
+    cam.toSide(side ?? sideOfTile(tile), true);
+    if (cam.closeup) cam.shot(cam.homePose(tile), CLOSEUP.shotSmooth, true);
+    cam.apply();
+    this.scene.renderer.requestRender();
+  }
+
   private instant(label: string, f: () => void): Animation {
     return { label, start: () => void f(), finish: () => {} };
   }
@@ -165,10 +211,21 @@ export class Director implements DirectorLike {
       switch (e.type) {
         case 'turnStarted': {
           // Owner request (2026-11-18): the camera turns to the side the active token is on.
-          this.turnTo(sideOfTile(this.positions[e.seat] ?? state.players[e.seat].position), true);
+          const at = this.positions[e.seat] ?? state.players[e.seat].position;
+          if (sc.camera.closeup) {
+            // Stage 2 handoff: rotate to the side and move to the token in one move.
+            const tile = state.players[e.seat].jail && at === 10 ? IN_JAIL : at;
+            this.plannedSide = sideOfTile(tile);
+            q.push(this.cameraShot('home', () => sc.camera.homePose(tile), { smooth: CLOSEUP.handoffSmooth, side: sideOfTile(tile), block: true }));
+          } else this.turnTo(sideOfTile(at), true);
           break;
         }
         case 'diceRolled': {
+          if (sc.camera.closeup) {
+            // Stage 2 Dice shot: pull back to the medium shot; throw at about 80% of the way.
+            const at = this.positions[e.seat] ?? state.players[e.seat].position;
+            q.push(this.cameraShot('dice-shot', () => sc.camera.dicePose(sc.camera.side, at), { smooth: CLOSEUP.shotSmooth, block: true, gate: CLOSEUP.diceGate }));
+          }
           let th: ReturnType<typeof simulateThrow> | undefined;
           q.push({
             label: 'dice',
@@ -185,22 +242,32 @@ export class Director implements DirectorLike {
         }
         case 'moved': {
           const id = this.tokenOf(state, e.seat);
+          const closeup = sc.camera.closeup;
+          const target = e.steps === 0 && e.to === 10 && state.players[e.seat].jail ? IN_JAIL : e.to;
           if (e.steps === 0) {
-            // Direct move (to jail): glide.
-            const target = e.to === 10 && state.players[e.seat].jail ? IN_JAIL : e.to;
-            q.push(sc.tokens.glide(id, target, speed, this.follow));
+            // Direct move (to jail): glide. Close-up pulls back to the Table rest view for it.
+            if (closeup) q.push(this.cameraShot('pull-back', () => sc.camera.restPose(SIDE_YAW[sc.camera.side], 1), { smooth: CLOSEUP.shotSmooth, block: true, gate: 0.9 }));
+            q.push(sc.tokens.glide(id, target, speed, closeup ? undefined : this.follow));
           } else {
             const n = Math.abs(e.steps);
-            const dir = Math.sign(e.steps);
+            const dir = Math.sign(e.steps) as 1 | -1;
             const path = Array.from({ length: n }, (_, k) => (((e.from + dir * (k + 1)) % 40) + 40) % 40);
             // Instant speed: one tap on arrival instead of a tap per tile.
             const tap = this.speed === Infinity ? undefined : () => this.sound.tap();
             if (!tap) q.push(this.instant('tap', () => this.sound.tap()));
-            q.push(sc.tokens.travel(id, path, speed, this.follow, tap));
+            q.push(sc.tokens.travel(id, path, speed, closeup ? this.chaseFollow(e.from, dir) : this.follow, tap));
           }
-          // Landed on another side of the board: the camera turns there once the token lands.
           this.positions[e.seat] = e.to;
-          this.turnTo(sideOfTile(e.to));
+          if (closeup) {
+            // Stage 2 Landed shot: the group, its signs and buildings; holds through the buy
+            // prompt, auction, rent and cards. The side (and light rig) switches on landing.
+            const side = sideOfTile(target);
+            this.plannedSide = side;
+            q.push(this.cameraShot('landed', () => sc.camera.homePose(target, e.steps < 0 ? -1 : 1), { smooth: CLOSEUP.shotSmooth, side }));
+          } else {
+            // Landed on another side of the board: the camera turns there once the token lands.
+            this.turnTo(sideOfTile(e.to));
+          }
           break;
         }
         case 'propertyTransferred': {
@@ -352,6 +419,8 @@ export class Director implements DirectorLike {
   /** Confirm skips to the end state. */
   skip(): void {
     this.scene.queue.flush();
+    // A close-up move still easing after its queue item ended snaps too (Stage 2 section 2.6).
+    if (this.scene.camera.closeup) this.scene.camera.settle();
     this.scene.renderer.requestRender();
   }
 }

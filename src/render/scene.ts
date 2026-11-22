@@ -6,7 +6,7 @@ import { AnimationQueue } from '../director/queue';
 import { createBoard, type BoardObject } from './board';
 import { createBoardTexture } from './boardTexture';
 import { Buildings } from './buildings';
-import { CameraDirector } from './cameraDirector';
+import { CLOSEUP, CameraDirector } from './cameraDirector';
 import { Decals } from './decals';
 import { createDecks } from './decks';
 import { Signs } from './signs';
@@ -91,6 +91,21 @@ export class GameScene {
     s.stats.uploadMs = performance.now() - u0;
     s.stats.startupMs = performance.now() - t0;
 
+    // Stage 2 close-up camera: group framing, building tops, and boxes it must stay out of.
+    s.camera.board = board;
+    CLOSEUP.buildingTop = Math.max(CLOSEUP.buildingTop, s.buildings.maxHeight());
+    const deckBox = new THREE.Box3().setFromObject(s.decks);
+    s.camera.obstacles = () => {
+      const boxes = s.buildings.boxes();
+      boxes.push(deckBox);
+      for (const { token } of s.tokens.tokens.values()) {
+        const p = token.group.position;
+        boxes.push(new THREE.Box3(new THREE.Vector3(p.x - 0.015, p.y, p.z - 0.015), new THREE.Vector3(p.x + 0.015, p.y + 0.05, p.z + 0.015)));
+      }
+      for (const die of s.dice.group.children) if (die.visible) boxes.push(new THREE.Box3().setFromObject(die));
+      return boxes;
+    };
+
     s.renderer.addTicker((dt) => {
       const q = s.queue.update(dt);
       const c = s.camera.update(dt);
@@ -144,6 +159,7 @@ export class GameScene {
     this.board.setFaceTexture(bt.texture);
     this.decals.setBoardTexture(bt.texture);
     this.buildings.setBoard(board);
+    this.camera.board = board;
     this.stats.buildingsMs = this.buildings.lastBuildMs;
     this.renderer.requestRender();
   }

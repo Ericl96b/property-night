@@ -14,7 +14,7 @@ import type { Speed } from './director/queue';
 import type { NewGameConfig, SeatConfig, State } from './engine';
 import { rollDie, seedRng } from './engine/rng';
 import App from './ui/App.svelte';
-import { boardMaxNdcX } from './ui/stage';
+import { boardMaxNdcX, safeAreaNdc } from './ui/stage';
 import { sideOfTile } from './render/layout';
 import { openKV } from './storage/db';
 import { runMigrations } from './storage/migrations';
@@ -73,7 +73,7 @@ async function boot(): Promise<void> {
   const scene = await GameScene.create(root, CLASSIC_BOARD, settings.quality);
   performance.mark('pn-scene');
   // The board is sized to the free width between the overlay's side panels (re-fit on resize).
-  const fitCamera = (w: number, h: number) => scene.camera.setViewport(w, h, boardMaxNdcX(w, h));
+  const fitCamera = (w: number, h: number) => scene.camera.setViewport(w, h, boardMaxNdcX(w, h), safeAreaNdc(w, h));
   scene.renderer.onResize = fitCamera;
   fitCamera(window.innerWidth, window.innerHeight);
 
@@ -116,9 +116,12 @@ async function boot(): Promise<void> {
     controller.speed = settings.speed;
     scene.camera.settings.rotation = settings.boardRotation;
     scene.camera.settings.follow = settings.cameraFollow;
-    const rm = scene.camera.settings.reduceMotion !== settings.reduceMotion;
+    const changed = scene.camera.settings.reduceMotion !== settings.reduceMotion || scene.camera.settings.style !== settings.cameraStyle;
     scene.camera.settings.reduceMotion = settings.reduceMotion;
-    if (rm && controller.state) scene.camera.toSide(sideOfTile(controller.state.players[controller.state.turn.seat].position), true);
+    scene.camera.settings.style = settings.cameraStyle;
+    if (changed) scene.camera.setPeek(false);
+    // Reduce motion or camera style changed mid-game: put the camera on the active seat's view.
+    if (changed && controller.state && !director.busy) director.resetCamera(controller.state);
     scene.camera.apply();
     scene.renderer.setGraphics({ ao: settings.ambientOcclusion, exposure: settings.brightness, toneMapping: settings.toneMapping });
     scene.renderer.requestRender();
@@ -162,8 +165,7 @@ async function boot(): Promise<void> {
     controller.load(f.snapshot, f.actions, f.seed);
     input.clearBindings();
     f.snapshot.seats.forEach((s, i) => s.controllerId && input.bind(s.controllerId, i));
-    scene.camera.toSide((f.view?.cameraSide ?? sideOfTile(f.snapshot.players[f.snapshot.turn.seat].position)) as 0 | 1 | 2 | 3, true);
-    scene.renderer.requestRender();
+    director.resetCamera(f.snapshot, (f.view?.cameraSide ?? sideOfTile(f.snapshot.players[f.snapshot.turn.seat].position)) as 0 | 1 | 2 | 3);
   };
 
   const startGame = (cfg: NewGameConfig) => {
@@ -173,8 +175,7 @@ async function boot(): Promise<void> {
     // Seats are shuffled into turn order: bind each controller to its seat's final index.
     input.clearBindings();
     controller.state.seats.forEach((s, i) => s.controllerId && input.bind(s.controllerId, i));
-    scene.camera.toSide(sideOfTile(controller.state.players[controller.state.turn.seat].position), true);
-    scene.renderer.requestRender();
+    director.resetCamera(controller.state);
   };
   // Leave a clean board behind: no tokens, owner discs, stamps, ribbons, locks or buildings.
   const clearScene = () => {

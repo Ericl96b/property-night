@@ -5,6 +5,8 @@
   import type { Settings } from '../../app/settings';
   import ActionButton from './ActionButton.svelte';
   import { layer } from '../menuStack';
+  import { getContext } from 'svelte';
+  import { glyphFor, type GlyphFamily } from '../present';
 
   let {
     gs,
@@ -37,6 +39,10 @@
   const STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
   const BRIGHTNESS = [70, 80, 90, 100, 110, 120, 130];
 
+  // Stage 2 controls list: lettered discs follow the acting controller's family.
+  const glyphs = getContext<{ family: GlyphFamily; swap: boolean } | undefined>('glyphs');
+  const disc = (g: 'peek' | 'nudge') => glyphFor(g, glyphs?.family ?? 'playstation').letter;
+
   let confirm = $state<{ kind: 'forfeit'; seat: number } | { kind: 'new' } | null>(null);
   const humans = $derived(gs ? gs.seats.map((s, i) => ({ s, i })).filter(({ s, i }) => s.kind === 'human' && !gs.players[i].bankrupt) : []);
 </script>
@@ -67,11 +73,23 @@
           {/each}
         {/if}
         {#if gs}<ActionButton label="Quit to menu" onclick={() => (confirm = { kind: 'new' })} />{/if}
+        {#if gs}
+          <div class="controls" aria-label="Camera controls">
+            <div class="section">Controls</div>
+            <div class="ctl"><span class="letter">{disc('nudge')}</span><span class="what">Nudge camera</span><span class="key">Shift + arrows</span></div>
+            <div class="ctl"><span class="letter">{disc('peek')}</span><span class="what">Hold to peek at the board</span><span class="key">Hold C</span></div>
+          </div>
+        {/if}
       </div>
       <div class="col settings">
         <label>Speed
           <select value={settings.speed} onchange={(e) => onsetting({ speed: (e.currentTarget as HTMLSelectElement).value as Settings['speed'] })}>
             <option value="slow">Relaxed</option><option value="normal">Normal</option><option value="fast">Fast</option><option value="instant">Instant</option>
+          </select>
+        </label>
+        <label>Camera style
+          <select value={settings.cameraStyle} onchange={(e) => onsetting({ cameraStyle: (e.currentTarget as HTMLSelectElement).value as Settings['cameraStyle'] })}>
+            <option value="closeup">Close-up</option><option value="table">Table</option>
           </select>
         </label>
         <label>Quality
@@ -101,8 +119,11 @@
             </select>
           </label>
         {/each}
-        <label class="chk"><input type="checkbox" checked={settings.boardRotation} onchange={(e) => onsetting({ boardRotation: (e.currentTarget as HTMLInputElement).checked })} /> Board rotation</label>
-        <label class="chk"><input type="checkbox" checked={settings.cameraFollow} onchange={(e) => onsetting({ cameraFollow: (e.currentTarget as HTMLInputElement).checked })} /> Camera follow</label>
+        {#if settings.cameraStyle === 'table'}
+          <!-- Table style only: Close-up has rotation and following built in. -->
+          <label class="chk"><input type="checkbox" checked={settings.boardRotation} onchange={(e) => onsetting({ boardRotation: (e.currentTarget as HTMLInputElement).checked })} /> Board rotation</label>
+          <label class="chk"><input type="checkbox" checked={settings.cameraFollow} onchange={(e) => onsetting({ cameraFollow: (e.currentTarget as HTMLInputElement).checked })} /> Camera follow</label>
+        {/if}
         <label class="chk"><input type="checkbox" checked={settings.undo} onchange={(e) => onsetting({ undo: (e.currentTarget as HTMLInputElement).checked })} /> Undo last decision</label>
         <label class="chk"><input type="checkbox" checked={settings.swapNintendo} onchange={(e) => onsetting({ swapNintendo: (e.currentTarget as HTMLInputElement).checked })} /> Swap Confirm/Back on Nintendo pads</label>
         <label class="chk"><input type="checkbox" checked={settings.everyPayment} onchange={(e) => onsetting({ everyPayment: (e.currentTarget as HTMLInputElement).checked })} /> Show bills for every payment</label>
@@ -181,6 +202,37 @@
   .note {
     font: 600 15px/1.3 'Source Sans 3', sans-serif;
     color: var(--ink-2);
+  }
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .ctl {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font: 600 17px/1.2 'Source Sans 3', sans-serif;
+  }
+  .ctl .what {
+    flex: 1;
+  }
+  .ctl .key {
+    font: 600 14px/1 'Source Sans 3', sans-serif;
+    color: var(--ink-2);
+  }
+  /* Same lettered disc as ActionButton prompts. */
+  .letter {
+    width: 40px;
+    height: 40px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fff3c9, #c39445 60%, #5e4115);
+    color: var(--ink);
+    font: 800 17px/1 'Source Sans 3', sans-serif;
+    box-shadow: inset 0 0 0 3px rgba(43, 33, 25, 0.35);
   }
   .settings .chk {
     justify-content: flex-start;

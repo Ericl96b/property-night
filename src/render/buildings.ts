@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import type { BoardData, GroupId } from '../data/classicBoard';
 import { type FinishName, type GameBuildingAssets, buildGameAssets } from './buildingModels.js';
+import { bandBox } from './framing';
 import { BAND_CENTER_LY, BOARD_TOP, houseSlotLX, tileFrame, tileLocalToWorld, tileYaw } from './layout';
 
 /** Board units per model unit, uniform for houses and hotels (Batch 3 spec §5). */
@@ -109,6 +110,22 @@ export class Buildings {
   countOn(tile: number): { houses: number; hotel: boolean } {
     const on = this.placed.filter((p) => p.tile === tile);
     return { houses: on.filter((p) => p.kind === 'house').length, hotel: on.some((p) => p.kind === 'hotel') };
+  }
+
+  /** World bounding boxes of every standing building (the close-up camera keeps out of them). */
+  boxes(): THREE.Box3[] {
+    return this.placed.map((p) => {
+      const size = this.assets.designs[p.group][p.kind].size;
+      const s = BUILDING_SCALE;
+      return bandBox(p.tile, size.x * s, size.z * s, size.y * s, p.kind === 'hotel' ? 0 : houseSlotLX(p.slot));
+    });
+  }
+
+  /** Tallest building design in board units (close-up framing keeps building tops in view). */
+  maxHeight(): number {
+    let h = 0;
+    for (const id of GROUP_IDS) h = Math.max(h, this.assets.designs[id].house.size.y, this.assets.designs[id].hotel.size.y);
+    return h * BUILDING_SCALE;
   }
 
   get totals(): { houses: number; hotels: number } {

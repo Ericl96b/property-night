@@ -128,7 +128,7 @@ export async function runBenchmark(env: BenchEnv, mode: BenchMode, onProgress: (
   const { hz, raw } = await r.measureRefresh(60);
 
   scene.setSpeed('normal');
-  cam.settings = { rotation: true, follow: true, reduceMotion: false };
+  cam.settings = { rotation: true, follow: true, reduceMotion: false, style: 'closeup' };
   await env.ensureBoard(CLASSIC_BOARD);
   const state = sandboxState(CLASSIC_BOARD, 6);
   applyPreset(state, 'worstCase');
