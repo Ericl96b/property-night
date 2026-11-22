@@ -164,3 +164,45 @@ describe('input manager', () => {
     expect(r.m.seatOf(`${XBOX_ID}#2`)).toBe(0);
   });
 });
+
+describe('peek trigger (Stage 2)', () => {
+  it('R2 / ZR held on a bound pad peeks; release ends it; no intent is emitted', () => {
+    for (const [id, standard] of [
+      [XBOX_ID, true],
+      [SWITCH_RAW_ID, false],
+    ] as const) {
+      const r = rig();
+      const peeks: boolean[] = [];
+      r.m.onPeek = (h) => peeks.push(h);
+      r.set([pad(id, 0, { standard })]);
+      r.tick();
+      r.m.bind(id, 0);
+      r.set([pad(id, 0, { standard, pressed: [7] })]);
+      r.tick();
+      r.tick();
+      r.set([pad(id, 0, { standard })]);
+      r.tick();
+      expect(peeks).toEqual([true, false]);
+      expect(r.events).toHaveLength(0);
+    }
+  });
+
+  it('an analog trigger counts once past halfway; unbound pads do not peek', () => {
+    const r = rig();
+    const peeks: boolean[] = [];
+    r.m.onPeek = (h) => peeks.push(h);
+    const analog = (v: number): RawPad => {
+      const p = pad(XBOX_ID, 0);
+      return { ...p, buttons: p.buttons.map((b, i) => (i === 7 ? { pressed: false, value: v } : b)) };
+    };
+    r.set([analog(0.8)]);
+    r.tick();
+    expect(peeks).toEqual([]);
+    r.m.bind(XBOX_ID, 0);
+    r.set([analog(0.3)]);
+    r.tick();
+    r.set([analog(0.8)]);
+    r.tick();
+    expect(peeks).toEqual([true]);
+  });
+});

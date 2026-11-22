@@ -306,7 +306,15 @@ async function boot(): Promise<void> {
     },
   }) as typeof app;
 
+  // Stage 2: hold R2 / ZR / C to peek at the whole board while a game or the test board is on
+  // screen (menus included: the player asks for it, the game never moves the camera there).
+  const peek = (held: boolean) => {
+    scene.camera.setPeek(held && (!!controller.state || inTestBoard));
+    scene.renderer.wake();
+  };
+
   startKeyboard({
+    peek,
     intent: (i) => {
       if (app.intent(i, null)) return;
       if (i === 'fullscreen') toggleFullscreen();
@@ -323,6 +331,7 @@ async function boot(): Promise<void> {
     if (controller.state && e.seat === null) return;
     app.intent(e.intent, e.seat);
   };
+  input.onPeek = peek;
   input.onNudge = (x, y) => {
     scene.camera.setNudge(x, y);
     scene.renderer.wake();

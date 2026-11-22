@@ -13,6 +13,7 @@
     trade: 'Trade — top face button',
     l1: 'Left shoulder (L1 / L)',
     r1: 'Right shoulder (R1 / R)',
+    r2: 'Right trigger (R2 / ZR)',
     select: 'Select / Share / −',
     start: 'Start / Options / +',
     up: 'D-pad up',

@@ -9,6 +9,8 @@ export type Logical =
   | 'trade' // top face
   | 'l1'
   | 'r1'
+  /** Right trigger (R2 / ZR): hold to peek at the board (Stage 2). Not an intent. */
+  | 'r2'
   | 'select'
   | 'start'
   | 'up'
@@ -16,7 +18,7 @@ export type Logical =
   | 'left'
   | 'right';
 
-export const LOGICAL_ORDER: Logical[] = ['confirm', 'back', 'manage', 'trade', 'l1', 'r1', 'select', 'start', 'up', 'down', 'left', 'right'];
+export const LOGICAL_ORDER: Logical[] = ['confirm', 'back', 'manage', 'trade', 'l1', 'r1', 'r2', 'select', 'start', 'up', 'down', 'left', 'right'];
 
 export type PadKind = 'xinput' | 'ds4' | 'switchPro' | 'generic';
 
@@ -67,6 +69,7 @@ export const STANDARD: Mapping = {
   trade: { b: 3 },
   l1: { b: 4 },
   r1: { b: 5 },
+  r2: { b: 7 },
   select: { b: 8 },
   start: { b: 9 },
   up: { b: 12 },
@@ -87,6 +90,7 @@ export const SWITCH_PRO_RAW: Mapping = {
   trade: { b: 3 },
   l1: { b: 4 },
   r1: { b: 5 },
+  r2: { b: 7 },
   select: { b: 8 },
   start: { b: 9 },
   up: { hat: 9, value: -1 },
@@ -181,11 +185,14 @@ export class InputManager {
   onDisconnect: (deviceId: string, seat: number | null) => void = () => {};
   onReconnect: (deviceId: string, seat: number | null) => void = () => {};
   onNudge: (x: number, y: number) => void = () => {};
+  /** Stage 2: R2 / ZR held on any bound pad (true) or released by all (false). */
+  onPeek: (held: boolean) => void = () => {};
   /** While set, raw presses go to the remap capture instead of intents. */
   capture: ((deviceId: string, src: Source) => void) | null = null;
 
   private rt = new Map<string, PadRuntime>();
   private lastNudge: [number, number] = [0, 0];
+  private lastPeek = false;
   private captureRest = new Map<string, readonly number[]>();
 
   constructor(
@@ -253,7 +260,8 @@ export class InputManager {
   }
 
   private read(src: Source, pad: RawPad): boolean {
-    if ('b' in src) return !!pad.buttons[src.b]?.pressed;
+    // Triggers are analog on some pads: past halfway counts as pressed.
+    if ('b' in src) return !!pad.buttons[src.b]?.pressed || (pad.buttons[src.b]?.value ?? 0) > 0.5;
     if ('axis' in src) return (pad.axes[src.axis] ?? 0) * src.dir > STICK;
     const v = pad.axes[src.hat];
     return v !== undefined && Math.abs(v - src.value) < 0.1;
@@ -267,6 +275,7 @@ export class InputManager {
     let changed = false;
     let nx = 0;
     let ny = 0;
+    let peek = false;
     for (const pad of raw) {
       // Two identical pads share an id string; the index keeps them apart.
       const id = this.uniqueId(pad, raw);
@@ -304,6 +313,7 @@ export class InputManager {
       }
       this.pollPad(id, info, pad, mapping, now);
       if (this.bindings.has(id) || this.nudgeAnyPad) {
+        if (this.rt.get(id)!.prev.r2) peek = true;
         const ax = pad.axes[2] ?? 0;
         const ay = pad.axes[3] ?? 0;
         if (Math.abs(ax) > 0.2) nx = ax;
@@ -316,6 +326,10 @@ export class InputManager {
         changed = true;
         this.onDisconnect(id, this.seatOf(id));
       }
+    }
+    if (peek !== this.lastPeek) {
+      this.lastPeek = peek;
+      this.onPeek(peek);
     }
     if (nx !== this.lastNudge[0] || ny !== this.lastNudge[1]) {
       this.lastNudge = [nx, ny];
@@ -349,6 +363,8 @@ export class InputManager {
         return 'cycleLeft';
       case 'r1':
         return 'cycleRight';
+      case 'r2':
+        return null;
       case 'select':
         return 'log';
       case 'start':

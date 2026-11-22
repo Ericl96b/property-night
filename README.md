@@ -20,7 +20,8 @@ Each human seat owns one controller (join from the setup screen by pressing any 
 | Trade | V | Top face (Triangle / X) |
 | Auction bid increment | Q / E | L1 / R1 |
 | Navigate menus | Arrow keys | D-pad / left stick |
-| Nudge camera | Shift + arrows | Right stick |
+| Nudge camera (Close-up: orbit the shot) | Shift + arrows | Right stick |
+| Peek at the whole board (hold) | C | R2 (ZR) |
 | Pause menu | P | Start (Options / +) |
 | Game log | L | Select (Share / −) |
 | Fullscreen | F | from the pause menu |

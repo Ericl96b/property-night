@@ -7,6 +7,8 @@ export interface KeyboardHandlers {
   intent(i: Intent): void;
   /** Camera nudge vector in [−1, 1]² (x = yaw, y = pitch); (0, 0) when released. */
   nudge(x: number, y: number): void;
+  /** Stage 2: C held peeks at the whole board; released returns to the shot. */
+  peek?(held: boolean): void;
 }
 
 const KEYMAP: Record<string, Intent> = {
@@ -42,6 +44,11 @@ export function startKeyboard(h: KeyboardHandlers): void {
     // so the keyboard behaves like the D-pad: up/down move, left/right change the value.
     const numberArrow = t instanceof HTMLInputElement && t.type === 'number' && e.code.startsWith('Arrow');
     if (typing && !numberArrow && !['Escape', 'Enter'].includes(e.code)) return;
+    if (e.code === 'KeyC' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!e.repeat) h.peek?.(true);
+      e.preventDefault();
+      return;
+    }
     if (e.shiftKey && e.code.startsWith('Arrow')) {
       held.add(e.code);
       nudgeFromKeys();
@@ -54,7 +61,10 @@ export function startKeyboard(h: KeyboardHandlers): void {
     e.preventDefault();
     h.intent(intent);
   });
+  // A window that loses focus never sees the keyup: release the peek.
+  window.addEventListener('blur', () => h.peek?.(false));
   window.addEventListener('keyup', (e) => {
+    if (e.code === 'KeyC') h.peek?.(false);
     if (e.code.startsWith('Arrow')) {
       held.delete(e.code);
       nudgeFromKeys();
