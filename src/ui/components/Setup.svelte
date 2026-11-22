@@ -3,7 +3,8 @@
   // ("press any button to join" binds a pad to the next human seat), rules and board presets,
   // and turn order (random, or as listed with ▲/▼ reordering).
   import { onDestroy, onMount } from 'svelte';
-  import type { SeatConfig } from '../../engine';
+  import { seatsLockPromises, type SeatConfig } from '../../engine';
+  import { PROMISES_LOCK_REASON } from '../../app/rulesSchema';
   import { TOKEN_IDS } from '../../render/tokens/tokens';
   import type { InputManager, PadInfo } from '../../input/manager';
   import { PLAYER_COLORS, TOKEN_NAMES } from '../theme';
@@ -53,6 +54,7 @@
     void loadRules();
   });
   /** Bank-backed bot hint follows the chosen preset's "bankBotMode" rule. */
+  const promisesLocked = $derived(seatsLockPromises(seats.map((s) => s.kind)) && (rulesList.find((p) => p.id === rulesId)?.rules.tradingAllowed ?? true));
   const bankMode = $derived(rulesList.find((p) => p.id === rulesId)?.rules.bankBotMode ?? 'remove');
 
   let seats = $state<SeatConfig[]>([
@@ -165,6 +167,7 @@
       </select>
     </label>
     <button class="link" onclick={() => (editingRules = true)}>Edit rules…</button>
+    {#if promisesLocked}<span class="lockhint">Promises in trades: off. {PROMISES_LOCK_REASON}.</span>{/if}
     <label>Board
       <select bind:value={boardId} aria-label="Board preset">
         {#each boardList as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
@@ -202,7 +205,7 @@
 {/if}
 {#if editingRules}
   <div class="layer" use:layer={{ kind: 'menu', close: () => (editingRules = false) }}>
-    <RulesEditor {presets} selectedId={rulesId} onselect={(id) => (rulesId = id)} onclose={() => (editingRules = false)} />
+    <RulesEditor {presets} seatKinds={seats.map((s) => s.kind)} selectedId={rulesId} onselect={(id) => (rulesId = id)} onclose={() => (editingRules = false)} />
   </div>
 {/if}
 {#if remapping}
@@ -367,6 +370,10 @@
     display: flex;
     gap: 8px;
     align-items: center;
+  }
+  .lockhint {
+    color: var(--oxblood);
+    font-weight: 600;
   }
   .link {
     border: 0;

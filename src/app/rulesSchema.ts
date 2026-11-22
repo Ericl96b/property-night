@@ -1,5 +1,5 @@
 // Field definitions for the rules editor (SPEC §5, §7). One row per setting, grouped by area.
-import type { Rules } from '../engine';
+import { seatsLockPromises, type Rules } from '../engine';
 
 export type FieldKind = 'number' | 'money' | 'percent' | 'select' | 'toggle';
 
@@ -15,7 +15,19 @@ export interface RuleField {
   /** Show only when this returns true (e.g. loan settings when loans are on). */
   showIf?: (r: Rules) => boolean;
   help?: string;
+  /**
+   * Locked by the seat line-up: returns the reason (and the field shows as off), or null. The
+   * preset's own value is untouched, so it comes back when the cause goes (Stage 3 §6).
+   */
+  locked?: (ctx: RuleContext) => string | null;
 }
+
+export interface RuleContext {
+  seatKinds: readonly string[];
+}
+
+/** Bot lock (Stage 3 §6): a normal bot at the table turns trade promises off. */
+export const PROMISES_LOCK_REASON = 'Locked: a normal bot is seated';
 
 const yes = (r: Rules) => r.loans;
 
@@ -141,7 +153,14 @@ export const RULE_FIELDS: RuleField[] = [
   { key: 'doublesExtraRoll', area: 'Dice', label: 'Doubles grant another roll', kind: 'toggle' },
 
   { key: 'tradingAllowed', area: 'Trading', label: 'Trading allowed', kind: 'toggle' },
-  { key: 'promisesAllowed', area: 'Trading', label: 'Promises in trades', kind: 'toggle', showIf: (r) => r.tradingAllowed },
+  {
+    key: 'promisesAllowed',
+    area: 'Trading',
+    label: 'Promises in trades',
+    kind: 'toggle',
+    showIf: (r) => r.tradingAllowed,
+    locked: (ctx) => (seatsLockPromises(ctx.seatKinds) ? PROMISES_LOCK_REASON : null),
+  },
 
   { key: 'loans', area: 'Loans', label: 'Bank loans', kind: 'toggle' },
   {

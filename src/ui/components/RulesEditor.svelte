@@ -6,7 +6,14 @@
   import { RULE_AREAS, RULE_FIELDS, coerce, type RuleField } from '../../app/rulesSchema';
   import ActionButton from './ActionButton.svelte';
 
-  let { presets, selectedId, onselect, onclose }: { presets: RulesPresets; selectedId: string; onselect: (id: string) => void; onclose: () => void } = $props();
+  let {
+    presets,
+    selectedId,
+    onselect,
+    onclose,
+    seatKinds = [],
+  }: { presets: RulesPresets; selectedId: string; onselect: (id: string) => void; onclose: () => void; seatKinds?: readonly string[] } = $props();
+  const lockOf = (f: RuleField) => f.locked?.({ seatKinds }) ?? null;
 
   let list = $state<RulesPreset[]>([]);
   let current = $state<RulesPreset | null>(null);
@@ -117,8 +124,10 @@
             <div class="area">{g.area}</div>
             {#each g.fields as f (f.key)}
               <label class="field">
-                <span class="lbl">{f.label}{#if f.help}<span class="help">{f.help}</span>{/if}</span>
-                {#if f.kind === 'toggle'}
+                <span class="lbl">{f.label}{#if f.help}<span class="help">{f.help}</span>{/if}{#if lockOf(f)}<span class="help locked">{lockOf(f)}</span>{/if}</span>
+                {#if f.kind === 'toggle' && lockOf(f)}
+                  <input type="checkbox" checked={false} disabled aria-label="{f.label}: {lockOf(f)}" />
+                {:else if f.kind === 'toggle'}
                   <input type="checkbox" checked={!!val(f)} disabled={current.builtIn} onchange={(e) => setField(f, (e.currentTarget as HTMLInputElement).checked)} />
                 {:else if f.kind === 'select'}
                   <select value={String(val(f))} disabled={current.builtIn} onchange={(e) => setField(f, (e.currentTarget as HTMLSelectElement).value)}>
@@ -316,5 +325,9 @@
     display: grid;
     grid-template-columns: 2fr 1fr;
     gap: 10px;
+  }
+  .help.locked {
+    color: var(--oxblood);
+    font-weight: 600;
   }
 </style>
