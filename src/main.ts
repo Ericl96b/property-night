@@ -91,6 +91,7 @@ async function boot(): Promise<void> {
     card: (c) => controller.onCard(c),
     moment: (m) => controller.onMoment(m),
     idle: () => controller.onIdle(),
+    screenOpen: () => app?.screenOpen() ?? false,
   });
   director.settings = () => settings;
   // Sound starts on the first key, click, touch or controller button (browser autoplay rules).
@@ -210,6 +211,7 @@ async function boot(): Promise<void> {
     padBack: (seat: number) => void;
     setBenchState: (s: GameState | null) => void;
     testBoardChanged: () => void;
+    screenOpen: () => boolean;
   };
   let testBoard: TestBoard | null = null;
   let inTestBoard = false;

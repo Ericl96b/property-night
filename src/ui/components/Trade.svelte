@@ -641,7 +641,7 @@
               onpointerleave={() => (mouseDown = false)}
             >
               <span class="holdring" style="--p:{hold * 100}%"><span><Coin glyph="confirm" family={pad.family} {swap} size={30} /></span></span>
-              <span class="lbl">Accept<em class="why">Hold to accept</em></span>
+              <span class="lbl">Accept<span class="sub">Hold to accept</span></span>
             </button>
             <button class="btn" data-focus-key="counter" onclick={() => oncounter?.()}><Coin glyph="trade" family={pad.family} {swap} /><span class="lbl">Counter</span><em class="hint">Edit and send back</em></button>
             <button class="btn" data-focus-key="decline" onclick={() => onreject?.()}><span class="cspace"></span><span class="lbl">Decline</span></button>
@@ -1100,6 +1100,9 @@
     font: 600 15px/1.15 'Source Sans 3', sans-serif;
     color: #8e2f23;
   }
+  .btn .sub {
+    font: 600 15px/1.15 'Source Sans 3', sans-serif;
+  }
   .btn.primary {
     color: #2f5d46;
     font-weight: 800;
@@ -1216,11 +1219,15 @@
     gap: 22px;
     align-items: flex-start;
   }
+  .deal .dl .lab {
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
   .deal .dl {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    width: 120px;
+    width: 128px;
     flex: none;
     padding-top: 4px;
   }

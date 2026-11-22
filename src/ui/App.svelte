@@ -344,6 +344,11 @@
   }
 
   /** A bound controller for a human seat disconnected: pause until it returns. */
+  /** Inventory or Trade is on screen (the director keeps the camera still, Stage 3 §1). */
+  export function screenOpen(): boolean {
+    return !!gs && (panelSeat !== null || !!compose || gs.phase === 'trade');
+  }
+
   export function padLost(seat: number) {
     if (!gs || gs.phase === 'gameOver' || gs.players[seat]?.bankrupt) return;
     waitingSeat = seat;
@@ -668,7 +673,8 @@
         </div>
       {/if}
     {/if}
-    <button class="menu" aria-label="Pause menu" onclick={() => setPaused(true)}><img src={symbolUrl('ui-menu')} alt="" /></button>
+    <!-- Inventory and Trade fill the stage; Options still pauses (the button would cover their header). -->
+    {#if !screenOpen()}<button class="menu" aria-label="Pause menu" onclick={() => setPaused(true)}><img src={symbolUrl('ui-menu')} alt="" /></button>{/if}
     {#if paused}
       <div class="layer" use:layer={{ kind: 'menu', close: () => setPaused(false) }}>
       <PauseMenu

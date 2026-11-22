@@ -6,7 +6,9 @@
   import { installment, type Action, type State } from '../../engine';
   import type { Intent } from '../../input/keys';
   import { getPortrait } from '../../render/portraits';
+  import { tick } from 'svelte';
   import { layer } from '../menuStack';
+  import { focusEl } from '../focus';
   import { debtInfo, money, type GlyphFamily } from '../present';
   import { binderRows, binderStats, slotDetail, type BinderSlot } from '../inventory';
   import CardSlot from '../cards/CardSlot.svelte';
@@ -42,6 +44,7 @@
   let viewSeat = $state(seat);
   let focusedKey = $state<string | null>(null);
   let actionsOpen = $state(false);
+  let panelEl = $state<HTMLElement | null>(null);
 
   const viewing = $derived(viewSeat !== seat);
   const rows = $derived(binderRows(gs, viewSeat, seat));
@@ -70,6 +73,11 @@
     viewSeat = i;
     focusedKey = null;
     actionsOpen = false;
+    // Focus follows to the new binder's first card, so focus and the detail pane agree.
+    void tick().then(() => {
+      const el = panelEl?.querySelector<HTMLElement>('[data-autofocus]') ?? panelEl?.querySelector<HTMLElement>('.slot[data-focus-key]');
+      if (el) focusEl(el);
+    });
   }
 
   function onslot(x: BinderSlot) {
@@ -146,7 +154,7 @@
 {/snippet}
 
 <div class="dim"></div>
-<div class="panel inv" data-screen="inventory" data-view-seat={viewSeat}>
+<div class="panel inv" bind:this={panelEl} data-screen="inventory" data-view-seat={viewSeat}>
   <div class="ihead">
     <span class="tok" style="border-color:{owner.color}">{#if portrait}<img src={portrait} alt="" />{/if}</span>
     <div class="titles">

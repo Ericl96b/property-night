@@ -62,6 +62,8 @@ export interface DirectorHooks {
   card(card: CardView | null): void;
   moment(m: Moment | null): void;
   idle(): void;
+  /** Stage 3 §1: Inventory or Trade is open; the camera must not move (no push-ins). */
+  screenOpen?(): boolean;
 }
 
 const PAYMENT_TIME = 2.2;
@@ -197,7 +199,7 @@ export class Director implements DirectorLike {
       start: () => {
         if (m.kind === 'banner') this.sound.sting(m.tone === 'oxblood' ? 'bad' : 'good');
         this.hooks.moment(m);
-        if (tile !== undefined) {
+        if (tile !== undefined && !this.hooks.screenOpen?.()) {
           const [x, z] = tileLocalToWorld(tileFrame(tile), 0, 0);
           sc.camera.pushIn(new THREE.Vector3(x, BOARD_TOP, z));
         }

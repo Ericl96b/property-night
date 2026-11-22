@@ -224,6 +224,7 @@ export function reasonSentence(s: State, tile: number, why: string): string {
     return `You don't own ${missing.map((i) => s.board.tiles[i].name).join(' or ')}.`;
   }
   if (why === 'no buildings') return 'No buildings to sell.';
+  if (why === 'not now' && s.phase === 'debt') return 'Not while raising money: sell or mortgage instead.';
   if (why === 'pledged to a loan') return 'Pledged to a bank loan.';
   return `${cap(why)}.`;
 }
