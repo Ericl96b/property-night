@@ -6,8 +6,8 @@ import type { GameScene } from '../render/scene';
 import type { Director } from '../director/director';
 import type { BoardData, GroupId } from '../data/classicBoard';
 import type { State } from '../engine';
-import type { CameraSettings } from '../render/cameraDirector';
-import type { Side } from '../render/layout';
+import { CLOSEUP, type CameraSettings, type CloseupTunables } from '../render/cameraDirector';
+import { type Side, sideOfTile } from '../render/layout';
 import {
   GROUP_ORDER,
   addBuilding,
@@ -34,6 +34,39 @@ export interface TestBoardEnv {
   onChange(): void;
 }
 
+/** Stage 2 camera tuning: the shots the Camera panel can show. */
+export type TuneShot = 'home' | 'dice' | 'chase' | 'landed';
+
+/** Slider ranges for every close-up tunable (Test board → Camera). */
+export const TUNABLE_RANGES: { key: keyof CloseupTunables; label: string; min: number; max: number; step: number }[] = [
+  { key: 'fov', label: 'FOV (°)', min: 20, max: 50, step: 1 },
+  { key: 'homePitch', label: 'Home pitch (°)', min: 20, max: 70, step: 1 },
+  { key: 'homeYawOffset', label: 'Home yaw offset (°)', min: 0, max: 45, step: 1 },
+  { key: 'homeMargin', label: 'Home margin', min: 0, max: 0.2, step: 0.01 },
+  { key: 'diceZoom', label: 'Dice zoom', min: 0.7, max: 1.1, step: 0.01 },
+  { key: 'diceGate', label: 'Dice throw gate', min: 0.5, max: 1, step: 0.05 },
+  { key: 'chasePitch', label: 'Chase pitch (°)', min: 15, max: 60, step: 1 },
+  { key: 'chaseYawOffset', label: 'Chase yaw offset (°)', min: 0, max: 70, step: 1 },
+  { key: 'chaseLookAhead', label: 'Chase look-ahead (tiles)', min: 0, max: 4, step: 0.1 },
+  { key: 'chaseDistance', label: 'Chase distance', min: 0.15, max: 0.8, step: 0.01 },
+  { key: 'shotSmooth', label: 'Shot smoothing (s)', min: 0.05, max: 1, step: 0.01 },
+  { key: 'handoffSmooth', label: 'Handoff smoothing (s)', min: 0.05, max: 1, step: 0.01 },
+  { key: 'chaseSmooth', label: 'Chase smoothing (s)', min: 0.05, max: 1, step: 0.01 },
+  { key: 'peekSmooth', label: 'Peek smoothing (s)', min: 0.05, max: 1, step: 0.01 },
+  { key: 'minHeight', label: 'Minimum height', min: 0.01, max: 0.12, step: 0.005 },
+  { key: 'buildingTop', label: 'Building top', min: 0.02, max: 0.08, step: 0.002 },
+  { key: 'orbitYaw', label: 'Orbit yaw (°)', min: 0, max: 45, step: 1 },
+  { key: 'orbitPitchUp', label: 'Orbit pitch up (°)', min: 0, max: 30, step: 1 },
+  { key: 'orbitPitchDown', label: 'Orbit pitch down (°)', min: 0, max: 20, step: 1 },
+];
+
+/** The current tunables as a TS object literal, ready to paste over `CLOSEUP` in cameraDirector.ts. */
+export function closeupLiteral(t: CloseupTunables = CLOSEUP): string {
+  const round = (v: number) => Number(v.toFixed(4));
+  const body = (Object.keys(t) as (keyof CloseupTunables)[]).map((k) => `  ${k}: ${round(t[k])},`).join('\n');
+  return `export const CLOSEUP = {\n${body}\n};\n`;
+}
+
 export class TestBoard {
   state: State;
   preset: PresetId = 'empty';
@@ -43,6 +76,11 @@ export class TestBoard {
   tile = 1;
   closeUp = false;
   animating = false;
+  /** Stage 2: Camera tuning panel (switches the camera to Close-up while open). */
+  tuning = false;
+  tuneShot: TuneShot = 'home';
+  /** Tiles a "Play a move" hops (1–12). */
+  moveLen = 7;
   private savedCamera?: CameraSettings;
   private anim?: { scripts: PhaseScript[]; i: number; t: number; ticker: (dt: number, now: number) => boolean };
 
@@ -74,6 +112,8 @@ export class TestBoard {
   /** Leave: stop animations and give the camera options back (the caller clears the scene). */
   exit(): void {
     this.setAnimate(false);
+    this.tuning = false;
+    this.scene.camera.setPeek(false);
     this.scene.queue.flush();
     this.scene.decals.setHighlight(null);
     const cam = this.scene.camera;
@@ -110,7 +150,8 @@ export class TestBoard {
     if (!isPriced(this.state, tile)) return;
     this.tile = tile;
     this.scene.decals.setHighlight(tile);
-    if (this.closeUp) this.frameSelected();
+    if (this.tuning) this.showShot(true);
+    else if (this.closeUp) this.frameSelected();
     this.changed();
   }
 
@@ -226,6 +267,100 @@ export class TestBoard {
 
   private frameSelected(): void {
     this.scene.camera.setFollow(tileCenter(this.tile));
+  }
+
+  // --- camera tuning (Stage 2 §6) -----------------------------------------------------------------
+
+  /** Open / close the Camera panel. Open: Close-up style, the picked shot on the selected tile. */
+  setTuning(on: boolean): void {
+    if (on === this.tuning) return;
+    this.setAnimate(false);
+    this.scene.queue.flush();
+    this.tuning = on;
+    const cam = this.scene.camera;
+    cam.settings = { ...cam.settings, style: on ? 'closeup' : 'table' };
+    cam.setFollow(null);
+    if (on) this.showShot(true);
+    else {
+      cam.setPeek(false);
+      cam.toSide(cam.side, true);
+      cam.apply();
+    }
+    this.changed();
+  }
+
+  setTuneShot(s: TuneShot): void {
+    this.tuneShot = s;
+    this.showShot(false);
+    this.changed();
+  }
+
+  /** A slider moved: write the tunable and re-show the shot at once. */
+  setTunable(key: keyof CloseupTunables, value: number): void {
+    CLOSEUP[key] = value;
+    this.showShot(true);
+    this.changed();
+  }
+
+  setMoveLen(n: number): void {
+    this.moveLen = Math.max(1, Math.min(12, Math.round(n)));
+    this.changed();
+  }
+
+  /** Put the picked shot on the selected tile (the token of seat 0 stands there). */
+  showShot(instant: boolean): void {
+    if (!this.tuning) return;
+    const cam = this.scene.camera;
+    const tile = this.tile;
+    this.placeMover(tile);
+    const side = sideOfTile(tile);
+    cam.toSide(side, instant);
+    const pose =
+      this.tuneShot === 'dice'
+        ? cam.dicePose(side, tile)
+        : this.tuneShot === 'chase'
+          ? cam.chasePose({ s: tile, dir: 1 })
+          : cam.homePose(tile);
+    cam.shot(pose, CLOSEUP.shotSmooth, instant);
+    cam.apply();
+    this.scene.renderer.requestRender();
+  }
+
+  /**
+   * Play a move: seat 0's token hops `moveLen` tiles from the selected tile through the real
+   * director choreography (chase, corner blends, Landed shot). The selection follows it.
+   */
+  playMove(): void {
+    if (!this.tuning) this.setTuning(true);
+    this.scene.queue.flush();
+    const from = this.tile;
+    this.placeMover(from);
+    const to = (from + this.moveLen) % 40;
+    this.state.players[0].position = to;
+    this.env.director.play([{ type: 'moved', seat: 0, from, to, steps: this.moveLen }] as never, this.state);
+    this.tile = to;
+    this.scene.decals.setHighlight(isPriced(this.state, to) ? to : null);
+    this.changed();
+  }
+
+  /** Copy the tunables as a TS literal; returns the text (shown when the clipboard is blocked). */
+  async copyTunables(): Promise<string> {
+    const text = closeupLiteral();
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      /* the panel shows the text to copy by hand */
+    }
+    return text;
+  }
+
+  /** Seat 0's token stands on `tile` (it is the one the shots and moves use). */
+  private placeMover(tile: number): void {
+    const p = this.state.players[0];
+    if (!p || p.position === tile) return;
+    p.position = tile;
+    p.bankrupt = false;
+    this.env.director.sync(this.state);
   }
 
   /** Loop the benchmark's construction wave and board turns, for watching the motion. */

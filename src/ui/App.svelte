@@ -352,9 +352,14 @@
         stackBack();
         return true;
       case 'navLeft':
-      case 'navRight':
+      case 'navRight': {
+        // Stage 2 Camera panel: left/right change a focused slider or select; otherwise they
+        // move the selection.
+        const el = document.activeElement;
+        if (el && el.closest('.stage .testb') && isStepper(el) && stepControl(el, i === 'navRight' ? 1 : -1)) return true;
         t.step(i === 'navRight' ? 1 : -1);
         return true;
+      }
       case 'navUp':
       case 'navDown': {
         const panel = document.querySelector('.stage .testb');

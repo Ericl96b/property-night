@@ -76,7 +76,7 @@ function fakeScene() {
   queue.speed = 'instant';
   return {
     queue,
-    camera: { settings: { rotation: true, follow: true, reduceMotion: true }, side: 0, setFollow: vi.fn(), toSide: vi.fn(), setNudge: vi.fn(), apply: vi.fn() },
+    camera: { settings: { rotation: true, follow: true, reduceMotion: true }, side: 0, setFollow: vi.fn(), toSide: vi.fn(), setNudge: vi.fn(), setPeek: vi.fn(), apply: vi.fn() },
     buildings: { add: vi.fn(), remove: vi.fn(), set: vi.fn() },
     decals: { setHighlight: vi.fn() },
     renderer: { requestRender: vi.fn(), addTicker: vi.fn(), removeTicker: vi.fn() },
@@ -137,5 +137,37 @@ describe('board picking', () => {
     }
     expect(tileAt(0, 0)).toBeNull();
     expect(tileAt(2, 2)).toBeNull();
+  });
+});
+
+describe('Camera panel (Stage 2 §6)', () => {
+  it('opens in Close-up, sliders write the tunables, Copy values round-trips, leaving restores the style', async () => {
+    const { CameraDirector, CLOSEUP } = await import('../../src/render/cameraDirector');
+    const { closeupLiteral, TUNABLE_RANGES } = await import('../../src/bench/testBoard');
+    const scene = { ...fakeScene(), camera: new CameraDirector() };
+    scene.camera.settings = { rotation: false, follow: false, reduceMotion: false, style: 'table' };
+    const played: unknown[] = [];
+    const director = { sync: () => {}, play: (e: unknown[]) => played.push(...e) };
+    const tb = new TestBoard({ scene: scene as unknown as GameScene, director: director as unknown as Director, sound: { tock: () => {} }, ensureBoard: async () => {}, onChange: () => {} }, CLASSIC_BOARD);
+    tb.enter();
+    tb.setTuning(true);
+    expect(scene.camera.settings.style).toBe('closeup');
+    for (const s of ['home', 'dice', 'chase', 'landed'] as const) tb.setTuneShot(s);
+    const before = CLOSEUP.chasePitch;
+    tb.setTunable('chasePitch', 33);
+    expect(CLOSEUP.chasePitch).toBe(33);
+    // Every tunable has a slider.
+    expect(TUNABLE_RANGES.map((r) => r.key).sort()).toEqual(Object.keys(CLOSEUP).sort());
+    const lit = closeupLiteral();
+    const parsed = new Function(lit.replace('export const CLOSEUP =', 'return'))();
+    expect(parsed).toEqual(Object.fromEntries(Object.entries(CLOSEUP).map(([k, v]) => [k, Number(v.toFixed(4))])));
+    tb.setMoveLen(30);
+    expect(tb.moveLen).toBe(12);
+    tb.playMove();
+    expect(played).toHaveLength(1);
+    tb.setTunable('chasePitch', before);
+    tb.exit();
+    expect(scene.camera.settings.style).toBe('table');
+    expect(scene.camera.settings.rotation).toBe(false);
   });
 });

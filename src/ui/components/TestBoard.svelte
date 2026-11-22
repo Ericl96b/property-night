@@ -6,6 +6,8 @@
   import type { BoardPresets, BoardPreset } from '../../app/boardPresets';
   import type { PresetId } from '../../bench/scenes';
   import ActionButton from './ActionButton.svelte';
+  import { TUNABLE_RANGES, type TuneShot } from '../../bench/testBoard';
+  import { CLOSEUP } from '../../render/cameraDirector';
 
   let {
     tb,
@@ -59,6 +61,22 @@
   const tokens = $derived((void v, tb.tokens));
   const animating = $derived((void v, tb.animating));
   const closeUp = $derived((void v, tb.closeUp));
+  // Stage 2 Camera panel.
+  const tuning = $derived((void v, tb.tuning));
+  const tuneShot = $derived((void v, tb.tuneShot));
+  const moveLen = $derived((void v, tb.moveLen));
+  const values = $derived((void v, { ...CLOSEUP }));
+  const SHOTS: { id: TuneShot; label: string }[] = [
+    { id: 'home', label: 'Home' },
+    { id: 'dice', label: 'Dice' },
+    { id: 'chase', label: 'Chase' },
+    { id: 'landed', label: 'Landed' },
+  ];
+  let copied = $state<string | null>(null);
+  async function copy() {
+    copied = await tb.copyTunables();
+  }
+  const fmt = (x: number, step: number) => (step >= 1 ? String(Math.round(x)) : x.toFixed(step >= 0.1 ? 1 : step >= 0.01 ? 2 : 3));
 
   async function pickBoard(id: string) {
     boardId = id;
@@ -82,11 +100,36 @@
     </label>
     <ActionButton label={`Tokens: ${tokens === 0 ? 'Off' : tokens}`} onclick={() => tb.cycleTokens()} />
     <ActionButton label={animating ? 'Animate: on' : 'Animate: off'} onclick={() => tb.setAnimate(!animating)} />
+    <ActionButton label={tuning ? 'Camera panel: on' : 'Camera panel: off'} primary={tuning} onclick={() => tb.setTuning(!tuning)} />
     <ActionButton label={detailed ? 'Overlay: Detailed' : 'Overlay: FPS'} onclick={() => ondetailed(!detailed)} />
     <ActionButton label="Run benchmark from here…" onclick={onbenchmark} />
     <ActionButton label="Exit to menu" glyph="back" onclick={onexit} />
   </div>
 
+  {#if tuning}
+  <div class="panel right cam">
+    <div class="eyebrow">Camera · {name}</div>
+    <label class="row">Shot
+      <select value={tuneShot} onchange={(e) => tb.setTuneShot((e.currentTarget as HTMLSelectElement).value as TuneShot)}>
+        {#each SHOTS as s (s.id)}<option value={s.id}>{s.label}</option>{/each}
+      </select>
+    </label>
+    <label class="row">Move length
+      <input type="range" min="1" max="12" step="1" value={moveLen} oninput={(e) => tb.setMoveLen(Number((e.currentTarget as HTMLInputElement).value))} />
+      <span class="val">{moveLen}</span>
+    </label>
+    <ActionButton label={`Play a move (${moveLen})`} glyph="confirm" onclick={() => tb.playMove()} />
+    <ActionButton label="Copy values" onclick={copy} />
+    {#if copied}<textarea class="copied" readonly rows="6">{copied}</textarea>{/if}
+    {#each TUNABLE_RANGES as r (r.key)}
+      <label class="slider">
+        <span class="lbl">{r.label}</span>
+        <span class="val">{fmt(values[r.key], r.step)}</span>
+        <input type="range" min={r.min} max={r.max} step={r.step} value={values[r.key]} oninput={(e) => tb.setTunable(r.key, Number((e.currentTarget as HTMLInputElement).value))} />
+      </label>
+    {/each}
+  </div>
+  {:else}
   <div class="panel right">
     <div class="eyebrow">Selected · ←/→ to move</div>
     <div class="tile">{name}</div>
@@ -105,6 +148,7 @@
     <ActionButton label="Previous side" glyph="cycleLeft" onclick={() => tb.rotate(-1)} />
     <ActionButton label="Next side" glyph="cycleRight" onclick={() => tb.rotate(1)} />
   </div>
+  {/if}
 </div>
 
 <style>
@@ -157,6 +201,28 @@
     gap: 12px;
     font: 600 17px/1.2 'Source Sans 3', sans-serif;
     min-height: 56px;
+  }
+  .cam {
+    gap: 6px;
+  }
+  .slider {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 8px;
+    font: 600 15px/1.2 'Source Sans 3', sans-serif;
+  }
+  .slider input {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 28px;
+  }
+  .val {
+    font: 700 15px/1 'Source Sans 3', sans-serif;
+    color: var(--ink-2);
+  }
+  .copied {
+    width: 100%;
+    font: 12px/1.3 monospace;
   }
   select {
     height: 44px;
