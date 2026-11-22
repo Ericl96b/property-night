@@ -125,7 +125,7 @@ Each human seat owns one controller. The whole game is playable with controllers
 | --- | --- | --- | --- |
 | Bottom face | Confirm / Roll | Cross | B |
 | Right face | Back / Cancel | Circle | A |
-| Left face | Manage (build, mortgage, sell) | Square | Y |
+| Left face | Inventory (build, mortgage, sell, loans) | Square | Y |
 | Top face | Trade | Triangle | X |
 | L1 / R1 | Cycle selection, bid increment | L1 / R1 | L / R |
 | D-pad / left stick | Navigate | — | — |
@@ -191,17 +191,22 @@ Fixed rules: rent is collected automatically; Get Out of Jail Free cards can be 
 
 **Trades**
 
-- Proposed on your own turn with the Trade button; the other side responds with their controller.
-- Two columns: properties, cash, Get Out of Jail Free cards and promises on each side.
-- Properties with buildings cannot be traded (greyed out with the reason). Mortgaged properties can; the receiver gets the 10% prompt.
-- Receiver: Accept / Reject / Counter (counter opens the same screen with sides swapped).
+Stage 3 screen (`docs/stage3/property-night-stage3-spec.md` §4): "Across the Table + Deal Strip".
+
+- Proposed on your own turn with the Trade button; the other side responds with their own controller.
+- The proposer's mini binder (left), the tray (center: "A gives ⇄ B gives"), the partner's mini binder (right), and the deal strip: the whole trade in plain sentences, names only, never pronouns.
+- Properties in a set with buildings cannot be traded ("Has houses"), nor pledged ones ("Pledged"). Mortgaged properties can; the receiver gets the 10% prompt.
+- Review: the receiver's banner, glyphs and controller; the proposer's pad is paused. Accept is press-and-hold (about 0.8 s). Counter opens the same screen with sides swapped. Decline is focus + Confirm only: Back never decides a trade.
 - Cash is allowed in trades. Player-to-player loans are not.
 
-**Promises (enforced by the game)**
+**Promises (enforced by the game, Stage 3 §5)**
 
-- Rent-free: "A pays no rent to B on [tile] for the next N of A's turns", N = 1–99. Badge on the tile and in both player panels with turns remaining.
-- Void if the tile changes owner. Must be attached to a trade.
-- Generic model `Promise { kind, from, to, tileId?, turnsLeft }` for future kinds.
+- A promise covers a whole group and is made only in a trade, between the two traders; either side can promise either kind.
+- Rent-Free: the holder pays the promiser no rent on any tile of the group (a color set, Railroads or Utilities) the promiser owns, now or later, for N landings that would owe rent (1–99). Mortgaged and $0 landings don't count; a double-rent card landing counts once and is fully waived. The promiser must own a tile in the group after the trade. Selling the tiles doesn't void it.
+- No Building: the promiser can't build houses or hotels (or win a shortage-rule building auction) on a color set for N rounds (1–20). Selling, mortgaging and unmortgaging are unaffected. A round ends each time the anchor seat (whose turn it was at acceptance) starts a turn; if that seat goes out, the anchor moves to the next seat.
+- Matching promises (kind, promiser, holder, group) merge into one voucher; duplicates in one offer are rejected. Promises end at 0 or when either party is out.
+- Badges: the rent-free ribbon on every tile of the group the promiser owns; a No Building decal on every tile of the set; both in the player panels with the count left.
+- **Bot lock (§6):** a normal bot at the table turns promises (and any future loan term in trades) off for the whole game, decided at the start. Bank-backed bots don't.
 
 ---
 
@@ -223,7 +228,7 @@ Borrow from the bank on your own turn, secured by pledged properties or unsecure
 | Collateral seizure value | Purchase price + building sell-back value | Purchase price / mortgage value (+ buildings) |
 | Seized property goes to | Auction | Auction / unowned |
 
-- **Taking a loan:** Manage menu, choose secured or unsecured, pick collateral, amount, term. Preview shows the schedule and total interest. Pledged properties show a lock badge, still collect rent, can be built on (unless the no-build rule is on), cannot be traded, sold or mortgaged. Mortgaged properties cannot be pledged.
+- **Taking a loan:** Inventory's Bank loan button (Stage 3), choose secured or unsecured, pick collateral, amount, term. Preview shows the schedule and total interest. Pledged properties show a lock badge, still collect rent, can be built on (unless the no-build rule is on), cannot be traded, sold or mortgaged. Mortgaged properties cannot be pledged.
 - **Repayment:** passing or landing on GO pays salary first, then takes the installment = principal ÷ remaining passes + interest on remaining principal. Early payoff of any amount on your own turn; zero balance closes the loan and unlocks collateral.
 - **Missed payment (secured):** the bank seizes all collateral for that loan immediately. If seizure value exceeds the remaining balance (principal + this installment's interest), the bank pays the difference. A shortfall is owed to the bank like unpaid rent.
 - **Missed payment (unsecured):** the installment is owed to the bank like unpaid rent.
@@ -262,7 +267,7 @@ Every roll and every turn end is a deliberate button press (no auto-roll). Every
 
 **Raise money flow:** when a player owes more than their cash, a blocking panel shows the amount and everything they can do (sell buildings, mortgage, trade, loan if allowed). "Declare bankruptcy" appears only when nothing can cover the debt, or as forfeit with confirm.
 
-**Screens:** main menu (Continue, New game, Load, Presets, Controllers, Settings); lobby (seats, token, color, controller, presets, turn order); game; property card view; Manage; pause (resume, save, rules reference, settings, forfeit, quit); end of game + stats.
+**Screens:** main menu (Continue, New game, Load, Presets, Controllers, Settings); lobby (seats, token, color, controller, presets, turn order); game; property card view; Inventory (the binder, Stage 3 §3: build, sell, mortgage, loans, raising money for a debt; other players' binders view-only with L/R); pause (resume, save, rules reference, settings, forfeit, quit); end of game + stats.
 
 **Ease of use**
 
@@ -449,7 +454,7 @@ Card         // text + Effect
 Seat         // kind: 'human' | 'bot' | 'bankBot', token, color, controllerId?, boardSide
 PlayerState  // cash, position, jail, properties, gojfCards, loans[], bankrupt
 Loan         // principal, rate, passesLeft, collateral: TileId[]
-Promise      // kind: 'rentFree', from, to, tileId, turnsLeft
+Promise      // kind: 'rentFree' | 'noBuild', from, to, group, total, left, anchor? (noBuild)
 Auction      // tileId, highBid, highBidder, passed[], deadline
 State        // rules, board, decks, seats, players, turn, phase, bank, freeParkingPot, auction?, trade?, log, rng
 ```
