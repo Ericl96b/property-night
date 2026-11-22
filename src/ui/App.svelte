@@ -4,7 +4,7 @@
   import type { Action, SeatConfig } from '../engine';
   import type { GameController, GameView } from '../app/controller';
   import type { Settings } from '../app/settings';
-  import type { Intent } from '../input/keys';
+  import { keyboardConfirmHeld, type Intent } from '../input/keys';
   import { decide } from '../app/ownership';
   import { glyphFamily, type InputManager, type PadInfo } from '../input/manager';
   import { activate, cycleFocus, defaultFocus, focusEl, hoverFocus, isStepper, moveFocus, stepControl, type Dir } from './focus';
@@ -13,7 +13,7 @@
   import { SPEED_FACTOR } from '../director/queue';
   import LogPanel from './components/LogPanel.svelte';
   import StatsPanel from './components/StatsPanel.svelte';
-  import TradePanel from './components/TradePanel.svelte';
+  import Trade from './components/Trade.svelte';
   import LoanPanel from './components/LoanPanel.svelte';
   import MainMenu from './components/MainMenu.svelte';
   import SavePanel from './components/SavePanel.svelte';
@@ -240,8 +240,10 @@
       (actions.some((a) => ['build', 'sell', 'mortgage', 'unmortgage'].includes(a.type)) || (actor === gs.turn.seat && ['preRoll', 'buy', 'postRoll'].includes(gs.phase))),
   );
   /** A full-screen screen (Inventory, Trade) can take intents the shared router leaves alone (L/R). */
-  let screenIntent: ((i: Intent) => boolean) | null = null;
-  const registerIntent = (h: ((i: Intent) => boolean) | null) => (screenIntent = h);
+  let screenIntent: ((i: Intent, deviceSeat: number | null) => boolean) | null = null;
+  const registerIntent = (h: ((i: Intent, deviceSeat: number | null) => boolean) | null) => (screenIntent = h);
+  /** Hold-to-accept (Stage 3 §4.5): Confirm still held on the keyboard or on that seat's pad. */
+  const confirmHeld = (seat: number) => keyboardConfirmHeld() || input.confirmHeld(seat);
   /** Glyphs and pad name of the controller that owns a screen (Stage 3 §3 footer). */
   function padOf(seat: number | null): { family: 'playstation' | 'nintendo'; label: string | null } {
     void pads;
@@ -462,6 +464,9 @@
     const d = decide(gs, deviceSeat, i);
     if (!d.allowed || d.seat === null) return true; // other players' controllers are read-only here
     const seat = d.seat;
+    // Full-screen screens (Inventory, Trade) see intents first: L/R, the trade's top face, and
+    // Back inside the trade tray or on the proposer's paused pad.
+    if (screenIntent?.(i, deviceSeat)) return true;
     // Back closes the top menu one level; on a game decision (buy, auction, trade reply, debt)
     // it does nothing — those need the option chosen and confirmed (Stage 1 §1).
     if (i === 'back') {
@@ -480,7 +485,6 @@
       }
       if (i === 'confirm' && owned && Number(owned.dataset.bidSeat) !== seat) return true;
     }
-    if (screenIntent?.(i)) return true;
     if (navigate(i)) return true;
     if (i === 'confirm' && clickFocused()) return true;
     // Bidding is menu-based (§3): focus an option and confirm it. Nothing else bids or passes.
@@ -492,10 +496,8 @@
     if (compose || loanSeat !== null) return true;
     if (gs.phase === 'trade') {
       const t = gs.trade!;
-      if (seat === t.to && gs.seats[seat].kind === 'human') {
-        if (i === 'confirm') act({ type: 'acceptTrade', seat });
-        else if (i === 'trade') openTrade(seat);
-      }
+      // Accept is press-and-hold on the review screen; Confirm never accepts outright here.
+      if (seat === t.to && gs.seats[seat].kind === 'human' && i === 'trade') openTrade(seat);
       return true;
     }
     if (i === 'trade') {
@@ -599,18 +601,17 @@
     {/if}
     {#if compose && !view.busy}
       <div class="layer" use:layer={{ kind: 'menu', close: () => (compose = null) }}>
-        <TradePanel {gs} mode="compose" seat={compose.seat} initial={compose.initial} counter={compose.counter} onsubmit={submitTrade} oncancel={() => (compose = null)} />
+        <Trade {gs} mode="compose" seat={compose.seat} initial={compose.initial} counter={compose.counter} swap={settings.swapNintendo} {padOf} {registerIntent} onsubmit={submitTrade} oncancel={() => (compose = null)} />
       </div>
     {:else if gs.phase === 'trade' && !view.busy}
+      <!-- The receiver answers on their own controller; Back never decides (Stage 3 §4.5). -->
       <div class="layer" use:layer={{ kind: 'decision' }}>
-      {#if gs.seats[gs.trade!.to].kind === 'human'}
-        <TradePanel {gs} mode="respond" seat={gs.trade!.to}
+        <Trade {gs} mode={gs.seats[gs.trade!.to].kind === 'human' ? 'review' : 'waiting'} seat={gs.seats[gs.trade!.to].kind === 'human' ? gs.trade!.to : gs.trade!.from}
+          swap={settings.swapNintendo} {padOf} isConfirmHeld={confirmHeld} {registerIntent}
           onaccept={() => act({ type: 'acceptTrade', seat: gs.trade!.to })}
           onreject={() => act({ type: 'rejectTrade', seat: gs.trade!.to })}
-          oncounter={() => openTrade(gs.trade!.to)} />
-      {:else}
-        <TradePanel {gs} mode="waiting" seat={gs.trade!.from} oncancel={() => act({ type: 'cancelTrade', seat: gs.trade!.from })} />
-      {/if}
+          oncounter={() => openTrade(gs.trade!.to)}
+          oncancel={() => act({ type: 'cancelTrade', seat: gs.trade!.from })} />
       </div>
     {/if}
     {#if panelSeat !== null}

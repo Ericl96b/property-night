@@ -29,8 +29,16 @@ const KEYMAP: Record<string, Intent> = {
   ArrowRight: 'navRight',
 };
 
+let confirmDown = 0;
+/** Stage 3 hold-to-accept: Space or Enter is held down right now. */
+export function keyboardConfirmHeld(): boolean {
+  return confirmDown > 0;
+}
+
 /** Shift + arrows nudge the camera (arrows alone navigate menus). */
 export function startKeyboard(h: KeyboardHandlers): void {
+  const confirmKeys = new Set<string>();
+  const syncConfirm = () => (confirmDown = confirmKeys.size);
   const held = new Set<string>();
   const nudgeFromKeys = () => {
     const x = (held.has('ArrowRight') ? 1 : 0) - (held.has('ArrowLeft') ? 1 : 0);
@@ -57,14 +65,23 @@ export function startKeyboard(h: KeyboardHandlers): void {
     }
     const intent = KEYMAP[e.code];
     if (!intent) return;
+    if (intent === 'confirm') {
+      confirmKeys.add(e.code);
+      syncConfirm();
+    }
     if (e.repeat && !intent.startsWith('nav')) return;
     e.preventDefault();
     h.intent(intent);
   });
   // A window that loses focus never sees the keyup: release the peek.
-  window.addEventListener('blur', () => h.peek?.(false));
+  window.addEventListener('blur', () => {
+    h.peek?.(false);
+    confirmKeys.clear();
+    syncConfirm();
+  });
   window.addEventListener('keyup', (e) => {
     if (e.code === 'KeyC') h.peek?.(false);
+    if (confirmKeys.delete(e.code)) syncConfirm();
     if (e.code.startsWith('Arrow')) {
       held.delete(e.code);
       nudgeFromKeys();

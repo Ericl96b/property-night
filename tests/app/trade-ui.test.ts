@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { counterOf, dealSentences, emptyOffer, partners, promisesOffReason, sideTotals, tradeTiles } from '../../src/ui/trade';
+import { counterOf, dealSentences, emptyOffer, partners, promisesOffReason, sideSummary, sideTotals, tradeTiles } from '../../src/ui/trade';
 import { edit, game, own } from '../engine/helpers';
 
 describe('trade screen helpers', () => {
@@ -57,9 +57,10 @@ describe('trade screen helpers', () => {
     expect(dealSentences(s, j)[1]).toBe('P1 gives nothing.');
   });
 
-  it('side totals: list value is deed prices plus cash', () => {
+  it('side totals: list value is the deeds, cash and jail cards listed apart', () => {
     const o = { ...emptyOffer(0, 1), give: { tiles: [3], cash: 50, gojf: 0 } };
-    expect(sideTotals(s, o, 0)).toEqual({ listValue: 110, cash: 50, cards: 1 });
+    expect(sideTotals(s, o, 0)).toEqual({ listValue: 60, cash: 50, cards: 0, promises: 0 });
+    expect(sideSummary(s, o, 0)).toBe('List value $60 · cash $50');
   });
 
   it('locked games end the strip with a note and name the bot', () => {

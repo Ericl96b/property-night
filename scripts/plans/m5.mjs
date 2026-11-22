@@ -1,3 +1,5 @@
+// SUPERSEDED (Stage 3, 2026-11-22): this drives the old TradePanel, which Stage 3 replaced.
+// The trade checks now live in scripts/plans/stage3.mjs. Kept as the M5 record; it no longer runs.
 import { H } from './helpers.mjs';
 
 const idle = () => !window.__pn.controller.view.busy && !window.__pn.controller.view.moment && !window.__pn.controller.view.card;

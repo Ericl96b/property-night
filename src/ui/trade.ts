@@ -77,12 +77,23 @@ export function sideOf(o: TradeOffer, seat: number): TradeSide {
   return seat === o.from ? o.give : o.get;
 }
 
-/** "List value $X · cash $Y · N cards" (Stage 3 §4.1): deed prices plus cash. */
-export function sideTotals(gs: State, o: TradeOffer, seat: number): { listValue: number; cash: number; cards: number } {
+/**
+ * Tray summary (Stage 3 §4.1, as in the mock-ups): "List value $X · cash $Y · N cards · N promises".
+ * List value is the printed price of the deeds; cards are Get Out of Jail Free cards.
+ */
+export function sideTotals(gs: State, o: TradeOffer, seat: number): { listValue: number; cash: number; cards: number; promises: number } {
   const side = sideOf(o, seat);
   const deeds = side.tiles.reduce((n, t) => n + (gs.board.tiles[t].price ?? 0), 0);
-  const vouchers = o.promises.filter((p) => p.from === seat).length;
-  return { listValue: deeds + side.cash, cash: side.cash, cards: side.tiles.length + side.gojf + vouchers };
+  return { listValue: deeds, cash: side.cash, cards: side.gojf, promises: o.promises.filter((p) => p.from === seat).length };
+}
+
+export function sideSummary(gs: State, o: TradeOffer, seat: number): string {
+  const t = sideTotals(gs, o, seat);
+  const parts = [`List value ${money(t.listValue)}`];
+  if (t.cash) parts.push(`cash ${money(t.cash)}`);
+  if (t.cards) parts.push(`${t.cards} ${t.cards === 1 ? 'card' : 'cards'}`);
+  if (t.promises) parts.push(`${t.promises} ${t.promises === 1 ? 'promise' : 'promises'}`);
+  return parts.join(' · ');
 }
 
 /** "A", "A and B", "A, B and C". */

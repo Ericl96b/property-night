@@ -343,6 +343,21 @@ export class InputManager {
     return same.length > 1 ? `${pad.id}#${same.indexOf(pad) + 1}` : pad.id;
   }
 
+  /**
+   * Stage 3 hold-to-accept: is the Confirm button held right now on the pad bound to `seat`
+   * (or on any bound pad when `seat` is null)? Uses the last poll's button state.
+   */
+  confirmHeld(seat: number | null = null): boolean {
+    for (const [id, info] of this.pads) {
+      if (!info.connected) continue;
+      const s = this.seatOf(id);
+      if (s === null || (seat !== null && s !== seat)) continue;
+      const prev = this.rt.get(id)?.prev ?? {};
+      for (const l of ['confirm', 'back'] as const) if (prev[l] && this.logicalToIntent(l, info) === 'confirm') return true;
+    }
+    return false;
+  }
+
   private logicalToIntent(l: Logical, info: PadInfo): PadIntent | null {
     let x = l;
     // Optional swap for Nintendo pads: A (right face) confirms, B (bottom) goes back.
