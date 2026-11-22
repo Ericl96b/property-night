@@ -1,10 +1,15 @@
 <script lang="ts">
   // Bank loans (SPEC §7): take a secured or unsecured loan with a schedule preview; pay off
-  // existing loans early.
+  // existing loans early. Stage 3: opened from Inventory, drawn in the binder's language
+  // (collateral as deed thumbnails). The flow and its engine calls are unchanged.
   import type { Action, State } from '../../engine';
   import { installment, loanBlocker, loanLimit, pledgeBlocker, schedule } from '../../engine';
   import ActionButton from './ActionButton.svelte';
   import { money } from '../present';
+  import CardSlot from '../cards/CardSlot.svelte';
+  import { deedCard } from '../cards/model';
+
+  const chipOf = (why: string | null) => (!why ? null : why.includes('pledged') ? 'Pledged' : why.includes('buildings') ? 'Has houses' : why.includes('mortgaged') ? 'Mortgaged' : "Can't pledge");
 
   let { gs, seat, onaction, onclose }: { gs: State; seat: number; onaction: (a: Action) => void; onclose: () => void } = $props();
 
@@ -37,8 +42,11 @@
 <div class="dim"></div>
 <div class="panel loans">
   <div class="head">
-    <div class="eyebrow">Bank loans · {gs.seats[seat].name}</div>
-    <div class="cash">{money(p.cash)}</div>
+    <div>
+      <div class="kick">Bank loan</div>
+      <div class="eyebrow">{gs.seats[seat].name}'s bank loans</div>
+    </div>
+    <div class="cashc"><span class="sec">Cash</span><span class="cash">{money(p.cash)}</span></div>
   </div>
 
   {#if p.loans.length}
@@ -68,7 +76,7 @@
   {#if secured}
     <div class="coll">
       {#each candidates as c (c.tile)}
-        <button class="tile" class:on={collateral.includes(c.tile)} disabled={!!c.blocked} title={c.blocked ?? ''} onclick={() => toggle(c.tile)}>{c.name}</button>
+        <CardSlot item={deedCard(gs, c.tile)} current={collateral.includes(c.tile)} inOffer={collateral.includes(c.tile)} blocked={chipOf(c.blocked)} label={c.name} onclick={() => !c.blocked && toggle(c.tile)} />
       {/each}
       {#if !candidates.length}<div class="none">No properties to pledge.</div>{/if}
     </div>
@@ -107,6 +115,8 @@
     background: rgba(10, 5, 2, 0.55);
   }
   .loans {
+    background: #fbf6ea;
+    border-radius: 16px;
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
@@ -123,8 +133,21 @@
     justify-content: space-between;
     align-items: baseline;
   }
+  .kick {
+    font: 700 14px/1 'Source Sans 3', sans-serif;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #8e2f23;
+  }
   .eyebrow {
-    font: 800 32px/1.1 'Fraunces', serif;
+    font: 800 34px/1.1 'Fraunces', serif;
+    margin-top: 6px;
+  }
+  .cashc {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
   }
   .cash {
     font: 800 32px 'Fraunces', serif;
@@ -174,7 +197,11 @@
   .coll {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 2px;
+    padding: 6px;
+    border-radius: 10px;
+    background: #f3ead6;
+    box-shadow: inset 0 0 0 1.5px rgba(43, 33, 25, 0.12);
   }
   .tile {
     height: 44px;
