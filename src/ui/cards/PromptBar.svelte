@@ -9,7 +9,8 @@
 
 <div class="prompts" data-family={family}>
   {#each prompts as p (p.label)}
-    <span class="pr">
+    <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+    <span class="pr" class:click={!!p.onclick} role={p.onclick ? 'button' : undefined} onclick={p.onclick}>
       {#each p.glyphs as g, i}<span class="c" class:stack={i > 0}><Coin glyph={g} {family} {swap} /></span>{/each}
       <em>{p.label}</em>
     </span>
@@ -28,6 +29,9 @@
     display: inline-flex;
     align-items: center;
     gap: 10px;
+  }
+  .pr.click {
+    cursor: pointer;
   }
   .pr em {
     font-style: normal;

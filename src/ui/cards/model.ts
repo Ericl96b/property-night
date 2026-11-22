@@ -14,7 +14,7 @@ import { GROUP_LABEL, uiGroupColor, uiGroupLight } from '../groups';
 import type { Glyph } from '../present';
 
 /** One footer prompt: glyph coins (stacked) and a label. */
-export type Prompt = { glyphs: Glyph[]; label: string };
+export type Prompt = { glyphs: Glyph[]; label: string; /** Mouse: clicking the prompt does the same thing. */ onclick?: () => void };
 
 export type CardSize = 'thumb' | 'std' | 'detail';
 
@@ -139,4 +139,6 @@ export interface EmptyInfo {
   band: string | null;
   icon?: string;
   owner: { name: string; color: string } | null;
+  /** Caption instead of "Unowned" (e.g. "In deck"). */
+  note?: string;
 }

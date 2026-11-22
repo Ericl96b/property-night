@@ -9,6 +9,23 @@ export const H = `(() => {
       b.click();
       return true;
     },
+    /** Inventory (Stage 3): open each owned deed's action list and run its first enabled Build. */
+    async invBuildAny() {
+      const inv = () => document.querySelector('[data-screen=inventory]');
+      for (const slot of [...inv().querySelectorAll('.slot[data-focus-key^="t"]')]) {
+        slot.focus();
+        slot.click();
+        await new Promise((r) => setTimeout(r, 60));
+        const b = [...inv().querySelectorAll('.acts button')].find((x) => /^Build a/.test(x.textContent.trim()) && x.getAttribute('aria-disabled') !== 'true');
+        if (b) {
+          b.click();
+          return true;
+        }
+        window.__pn.app.intent('back', null);
+        await new Promise((r) => setTimeout(r, 60));
+      }
+      return false;
+    },
     async idle(ms = 15000) {
       const c = window.__pn.controller;
       const t0 = performance.now();

@@ -367,6 +367,14 @@ async function boot(): Promise<void> {
     startGame({ seats, seed: Number(params.get('seed') ?? 7), turnOrder: 'fixed' });
   }
 
+  // Review helper: ?demo=stage3 (or stage3bot, Sam a normal bot) loads the Stage 3 mock-up table.
+  const demo = params.get('demo');
+  if (demo === 'stage3' || demo === 'stage3bot') {
+    const { stage3Demo } = await import('./bench/stage3Demo');
+    const st = stage3Demo(demo === 'stage3bot' ? 'bot' : 'human');
+    await resume(makeSave('demo', 'Stage 3 demo', st, [], 3, 0));
+  }
+
   // Review helpers for scripted UI checks (scripts/cdp.mjs): steer the next dice and edit state.
   const forceDice = (...rolls: number[]) => {
     for (let seed = 1; seed < 5_000_000; seed++) {

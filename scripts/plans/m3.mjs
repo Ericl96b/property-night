@@ -43,13 +43,13 @@ export default {
       },
     },
     { until: idle, label: 'idle' },
-    { eval: () => window.__h.click(/Manage properties/), label: 'open manage' },
-    { until: () => !!document.querySelector('.manage'), label: 'manage panel' },
+    { eval: () => window.__h.click(/^Inventory/), label: 'open manage' },
+    { until: () => !!document.querySelector('[data-screen=inventory]'), label: 'manage panel' },
     {
       label: 'build 4 houses evenly',
       eval: async () => {
         for (let k = 0; k < 4; k++) {
-          window.__h.click(/^House/, '.manage button');
+          await window.__h.invBuildAny();
           await window.__h.idle();
         }
         const s = window.__pn.controller.state;
@@ -101,7 +101,7 @@ export default {
     },
     { until: idle, label: 'idle' },
     { eval: () => window.__h.click(/Roll dice/), label: 'roll into debt' },
-    { until: () => !!document.querySelector('.manage') && window.__pn.controller.state.phase === 'debt', label: 'raise-money panel', timeout: 20000 },
+    { until: () => !!document.querySelector('[data-screen=inventory]') && window.__pn.controller.state.phase === 'debt', label: 'raise-money panel', timeout: 20000 },
     { wait: 300 },
     { shot: 'm3-raise' },
     { eval: () => window.__h.click(/Declare bankruptcy/), label: 'declare' },

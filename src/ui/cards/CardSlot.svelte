@@ -71,7 +71,7 @@
     <div class="eslot">
       {#if empty.band}<div class="eband" style="background:{empty.band}"></div>{:else if empty.icon}<img class="eicon" src={empty.icon} alt="" width="34" height="34" />{/if}
       <div class="ename">{empty.name}</div>
-      {#if empty.owner}<div class="eown"><i style="background:{empty.owner.color}"></i>{empty.owner.name}</div>{:else}<div class="eown un">Unowned</div>{/if}
+      {#if empty.owner}<div class="eown"><i style="background:{empty.owner.color}"></i>{empty.owner.name}</div>{:else}<div class="eown un">{empty.note ?? 'Unowned'}</div>{/if}
     </div>
   {:else if children}
     {@render children()}

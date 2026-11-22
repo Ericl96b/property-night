@@ -25,7 +25,7 @@
   import DrawnCard from './components/DrawnCard.svelte';
   import Setup from './components/Setup.svelte';
   import AuctionPanel from './components/AuctionPanel.svelte';
-  import ManagePanel from './components/ManagePanel.svelte';
+  import Inventory from './components/Inventory.svelte';
   import PauseMenu from './components/PauseMenu.svelte';
   import MomentLayer from './components/MomentLayer.svelte';
   import ActionButton from './components/ActionButton.svelte';
@@ -233,7 +233,21 @@
   const actingName = $derived(gs && actor !== null && actor !== gs.turn.seat ? gs.seats[actor].name : null);
   const auctionHumans = $derived(gs?.phase === 'auction' ? gs.auction!.active.filter((i) => gs.seats[i].kind === 'human') : []);
   const debtSeat = $derived(gs?.phase === 'debt' && gs.seats[gs.debts[0].from].kind === 'human' ? gs.debts[0].from : null);
-  const manageable = $derived(actor !== null && actions.some((a) => ['build', 'sell', 'mortgage', 'unmortgage'].includes(a.type)));
+  const manageable = $derived(
+    actor !== null &&
+      !!gs &&
+      gs.phase !== 'debt' &&
+      (actions.some((a) => ['build', 'sell', 'mortgage', 'unmortgage'].includes(a.type)) || (actor === gs.turn.seat && ['preRoll', 'buy', 'postRoll'].includes(gs.phase))),
+  );
+  /** A full-screen screen (Inventory, Trade) can take intents the shared router leaves alone (L/R). */
+  let screenIntent: ((i: Intent) => boolean) | null = null;
+  const registerIntent = (h: ((i: Intent) => boolean) | null) => (screenIntent = h);
+  /** Glyphs and pad name of the controller that owns a screen (Stage 3 §3 footer). */
+  function padOf(seat: number | null): { family: 'playstation' | 'nintendo'; label: string | null } {
+    void pads;
+    const dev = seat !== null ? input.deviceForSeat(seat) : null;
+    return { family: dev ? glyphFamily(dev.kind) : glyphCtx.family, label: dev ? dev.label : null };
+  }
   const panelSeat = $derived(debtSeat ?? manageSeat);
   const canPropose = $derived(
     !!gs &&
@@ -466,6 +480,7 @@
       }
       if (i === 'confirm' && owned && Number(owned.dataset.bidSeat) !== seat) return true;
     }
+    if (screenIntent?.(i)) return true;
     if (navigate(i)) return true;
     if (i === 'confirm' && clickFocused()) return true;
     // Bidding is menu-based (§3): focus an option and confirm it. Nothing else bids or passes.
@@ -493,7 +508,7 @@
       return true;
     }
     if (i === 'manage') {
-      if (seatActions.some((a) => ['build', 'sell', 'mortgage', 'unmortgage'].includes(a.type)) && gs.phase !== 'debt') manageSeat = seat;
+      if (gs.phase !== 'debt' && (seatActions.some((a) => ['build', 'sell', 'mortgage', 'unmortgage'].includes(a.type)) || (seat === gs.turn.seat && ['preRoll', 'buy', 'postRoll'].includes(gs.phase)))) manageSeat = seat;
       return true;
     }
     if (gs.phase === 'gameOver') {
@@ -550,7 +565,7 @@
     <ContextPanel {gs} {actions} busy={view.busy} {actingName} error={view.error} onaction={act}>
       {#snippet extra()}
         {#if manageable && gs.phase !== 'debt'}
-          <ActionButton label="Manage properties" glyph="manage" disabled={view!.busy} onclick={openManage} />
+          <ActionButton label="Inventory" glyph="manage" disabled={view!.busy} onclick={openManage} />
         {/if}
         {#if gs.phase === 'speedChoice' && gs.turn.speedChoice?.anyTile && actor === gs.turn.seat}
           <select class="anytile" aria-label="Move to any space" onchange={(e) => act({ type: 'speedChoice', seat: gs.turn.seat, target: Number((e.currentTarget as HTMLSelectElement).value) })}>
@@ -598,10 +613,12 @@
       {/if}
       </div>
     {/if}
-    {#if panelSeat !== null && !view.busy}
-      <!-- Raising money for a debt is a game decision; managing on your turn is a menu. -->
+    {#if panelSeat !== null}
+      <!-- Raising money for a debt is a game decision; Inventory on your turn is a menu. It stays
+           open while a build or sale animates (actions wait), so focus and the open card stay put. -->
+      {@const pad = padOf(panelSeat)}
       <div class="layer" use:layer={debtSeat !== null ? { kind: 'decision' } : { kind: 'menu', close: () => (manageSeat = null) }}>
-        <ManagePanel {gs} seat={panelSeat} busy={view.busy} onaction={act} onclose={() => (manageSeat = null)} onloan={() => (loanSeat = panelSeat)} />
+        <Inventory {gs} seat={panelSeat} busy={view.busy} family={pad.family} swap={settings.swapNintendo} padLabel={pad.label} {registerIntent} onaction={act} onclose={() => (manageSeat = null)} onloan={() => (loanSeat = panelSeat)} />
       </div>
     {/if}
     {#if loanSeat !== null && !view.busy}

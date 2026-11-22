@@ -39,9 +39,9 @@ export default {
     { until: idle, label: 'idle' },
     { wait: 300 },
     { eval: () => ({ loans: window.__pn.controller.state.players[0].loans, cash: window.__pn.controller.state.players[0].cash }), label: 'loan state' },
-    { eval: () => window.__h.click(/Manage properties/), label: 'manage' },
-    { until: () => !!document.querySelector('.manage'), label: 'manage open' },
-    { eval: () => [...document.querySelectorAll('.manage .lock')].length, label: 'lock tags (expect 1)' },
+    { eval: () => window.__h.click(/^Inventory/), label: 'manage' },
+    { until: () => !!document.querySelector('[data-screen=inventory]'), label: 'manage open' },
+    { eval: () => [...document.querySelectorAll('[data-screen=inventory] .lockb')].length, label: 'lock tags (expect 1)' },
     { shot: 'm7-manage' },
   ],
 };
