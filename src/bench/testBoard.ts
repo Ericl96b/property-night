@@ -337,7 +337,7 @@ export class TestBoard {
     this.placeMover(from);
     const to = (from + this.moveLen) % 40;
     this.state.players[0].position = to;
-    this.env.director.play([{ type: 'moved', seat: 0, from, to, steps: this.moveLen }] as never, this.state);
+    this.env.director.play([{ type: 'moved', seat: 0, from, to, steps: this.moveLen, direct: false }], this.state);
     this.tile = to;
     this.scene.decals.setHighlight(isPriced(this.state, to) ? to : null);
     this.changed();

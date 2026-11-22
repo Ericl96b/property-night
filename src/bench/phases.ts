@@ -6,7 +6,8 @@ import type { GameScene } from '../render/scene';
 import type { Director } from '../director/director';
 import type { GameEvent, State } from '../engine';
 import { groupTiles } from '../engine/queries';
-import { BOARD_TOP, sideOfTile, tileFrame, tileLocalToWorld, type Side } from '../render/layout';
+import { BOARD_TOP, SIDE_YAW, sideOfTile, tileFrame, tileLocalToWorld, type Side } from '../render/layout';
+import { CLOSEUP } from '../render/cameraDirector';
 import { SPEED_FACTOR } from '../director/queue';
 import { GROUP_ORDER } from './scenes';
 
@@ -74,6 +75,16 @@ export function tileCenter(tile: number): THREE.Vector3 {
   return new THREE.Vector3(x, BOARD_TOP, z);
 }
 
+/**
+ * The whole-board view on a side. Table: the side turn. Close-up (Stage 2): the same rest view as
+ * a shot (what Peek shows), so the table-wide phases keep measuring the whole board.
+ */
+export function sideView(scene: GameScene, side: Side, instant: boolean): void {
+  const cam = scene.camera;
+  cam.toSide(side, instant);
+  if (cam.closeup) cam.shot(cam.restPose(SIDE_YAW[side], 1), CLOSEUP.handoffSmooth, instant);
+}
+
 /** Middle street of a color group (its close-up target). */
 export function groupCenterTile(s: State, i: number): number {
   const tiles = groupTiles(s.board, GROUP_ORDER[i]);
@@ -89,7 +100,7 @@ export function restPhase(len = 8): PhaseScript {
     duration: len,
     setup: ({ scene }) => {
       scene.camera.setFollow(null);
-      scene.camera.toSide(0, true);
+      sideView(scene, 0, true);
     },
     // Light ambient motion: a slow camera sway (the scene itself has no idle animation).
     tick: ({ scene }, t) => scene.camera.setNudge(0.15 * Math.sin(t * 0.9), 0.1 * Math.sin(t * 0.6)),
@@ -115,7 +126,7 @@ export function turnsPhase(len = 8): PhaseScript {
       const step = len / 4;
       while (next < 4 && t >= next * step) {
         next++;
-        scene.camera.toSide((next % 4) as Side);
+        sideView(scene, (next % 4) as Side, false);
       }
     },
   };
@@ -150,12 +161,17 @@ export function closeupsPhase(len = 12): PhaseScript & { slotAt(t: number): numb
   };
 }
 
-/** Frame color group `i` at the follow zoom, from the side it lies on. */
+/**
+ * Frame color group `i` from the side it lies on. Close-up style (Stage 2 §7): the Landed shot
+ * players actually see; Table: the old follow zoom.
+ */
 export function poseCloseup(c: PhaseCtx, i: number, instant: boolean): void {
+  const cam = c.scene.camera;
   const tile = groupCenterTile(c.state, i);
   const side = sideOfTile(tile);
-  if (side !== c.scene.camera.side || instant) c.scene.camera.toSide(side, instant);
-  c.scene.camera.setFollow(tileCenter(tile));
+  if (side !== cam.side || instant) cam.toSide(side, instant);
+  if (cam.closeup) cam.shot(cam.homePose(tile), CLOSEUP.shotSmooth, instant);
+  else cam.setFollow(tileCenter(tile));
 }
 
 // --- 4. Construction wave -----------------------------------------------------------------------
@@ -174,7 +190,7 @@ export function wavePhase(len = 12, ticks = new ParallelTicks()): PhaseScript {
       GROUP_ORDER.forEach((g, gi) => {
         const t0 = gi * slot;
         const tiles = groupTiles(c.state.board, g).filter((i) => c.state.tiles[i].buildings > 0);
-        sched.add(t0, () => c.scene.camera.toSide(sideOfTile(tiles[0] ?? 0)));
+        sched.add(t0, () => sideView(c.scene, sideOfTile(tiles[0] ?? 0), false));
         // Street by street: sell everything on the street (lift + fade), then drop it back in with
         // the build bounce (houses one by one; a hotel replaces four houses). Streets follow each
         // other so only about one street's sell meshes are on screen at a time, as in play.
@@ -207,8 +223,11 @@ export function wavePhase(len = 12, ticks = new ParallelTicks()): PhaseScript {
 
 // --- 5. Turn moment -------------------------------------------------------------------------------
 
-/** Dice roll with physics, a 7-tile hop with camera follow, and a payment moment. */
-export function turnMomentPhase(len = 10): PhaseScript {
+/**
+ * Dice roll with physics, a 7-tile hop with camera follow, a payment moment and the handoff to
+ * the next seat. Close-up runs the Stage 2 choreography: Home → Dice → Chase → Landed → handoff.
+ */
+export function turnMomentPhase(len = 14): PhaseScript {
   return {
     id: 'turn',
     name: 'Turn moment',
@@ -225,11 +244,14 @@ export function turnMomentPhase(len = 10): PhaseScript {
       cash[owner] += amount;
       // The events' end state: the token stands on the destination.
       const after: State = { ...s, players: s.players.map((p, i) => (i === seat ? { ...p, position: to, cash: cash[i] } : { ...p, cash: cash[i] })) };
+      const next = s.players.findIndex((p, i) => i !== seat && !p.bankrupt);
       const events: GameEvent[] = [
         { type: 'turnStarted', seat },
         { type: 'diceRolled', seat, dice: [3, 4], doubles: false },
         { type: 'moved', seat, from, to, steps: 7, direct: false },
         { type: 'payment', from: seat, to: owner, amount, reason: 'rent', tile: to, cash },
+        // Turn handoff (Stage 2 §2.5).
+        ...(next >= 0 ? [{ type: 'turnStarted', seat: next } as GameEvent] : []),
       ];
       c.scene.camera.setFollow(null);
       c.director.reseed(0x5eed);

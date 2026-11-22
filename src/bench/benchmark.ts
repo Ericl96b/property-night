@@ -15,7 +15,7 @@ import { targets } from '../perf/verdict';
 import { buildSummary, type CapturedPhase, type CapturedRun } from '../perf/report';
 import { COMPARE_CONFIGS, type BenchMode, type BenchSummary, type HeadroomResult, type PlayerConfig, type RunConfig, type SystemInfo } from '../perf/summary';
 import { applyPreset, sandboxState } from './scenes';
-import { ParallelTicks, closeupsPhase, poseCloseup, restPhase, turnMomentPhase, turnsPhase, wavePhase, type PhaseCtx, type PhaseScript } from './phases';
+import { ParallelTicks, closeupsPhase, poseCloseup, restPhase, sideView, turnMomentPhase, turnsPhase, wavePhase, type PhaseCtx, type PhaseScript } from './phases';
 import { groupTiles } from '../engine/queries';
 import { GROUP_ORDER } from './scenes';
 
@@ -48,7 +48,8 @@ function phasesFor(mode: BenchMode): { scripts: PhaseScript[]; headroom: boolean
     return { scripts: [restPhase(8 / 3), closeups, wavePhase(4)], headroom: false, closeups };
   }
   const closeups = closeupsPhase(12);
-  return { scripts: [restPhase(8), turnsPhase(8), closeups, wavePhase(12), turnMomentPhase(10)], headroom: true, closeups };
+  // Stage 2: the turn sequence runs 14 s so the close-up handoff plays before the phase ends.
+  return { scripts: [restPhase(8), turnsPhase(8), closeups, wavePhase(12), turnMomentPhase(14)], headroom: true, closeups };
 }
 
 /** Rough run length in seconds (for the progress bar and the mode picker). */
@@ -137,7 +138,8 @@ export async function runBenchmark(env: BenchEnv, mode: BenchMode, onProgress: (
   scene.queue.flush();
   cam.setFollow(null);
   cam.setNudge(0, 0);
-  cam.toSide(0, true);
+  cam.setPeek(false);
+  sideView(scene, 0, true);
   director.sync(state);
   const ctx: PhaseCtx = { scene, director, state, bigPayment: settings.bigPaymentAmount };
 
@@ -235,7 +237,7 @@ async function headroomPhase(env: BenchEnv, ctx: PhaseCtx, slot: number, hz: num
   const r = scene.renderer;
   poseCloseup(ctx, slot, true);
   scene.camera.setNudge(0, 0);
-  await timeline(scene, 1, signal); // let the follow zoom settle
+  await timeline(scene, 1, signal); // let the follow zoom / Landed shot settle
   let k = 0;
   let tried = 0;
   try {
