@@ -93,6 +93,8 @@ describe('close-up chase lap (all hotels)', () => {
     let inBox = 0;
     let maxStep = 0;
     let hidden = 0;
+    let outside = 0;
+    const safe = safeAreaNdc(W, H);
     let prevYaw = cam.viewYaw;
     const boxes = worstBoxes();
     for (let t = 0; t <= 40 * hopTime + 1; t += dt) {
@@ -107,8 +109,12 @@ describe('close-up chase lap (all hotels)', () => {
       maxStep = Math.max(maxStep, Math.abs(cam.viewYaw - prevYaw));
       prevYaw = cam.viewYaw;
       if (occludedFraction(pos, tok, TOKEN_H, boxes) > 0.5) hidden++;
+      // The live token, as the camera actually shows it, stays inside the safe area.
+      cam.camera.updateMatrixWorld();
+      const pts = [tok, tok.clone().setY(BOARD_TOP + TOKEN_H)].map((p) => p.clone().project(cam.camera));
+      if (pts.some((p) => p.x < safe.xMin - 1e-3 || p.x > safe.xMax + 1e-3 || p.y < safe.yMin - 1e-3 || p.y > safe.yMax + 1e-3)) outside++;
     }
-    return { minY, inBox, maxStepDeg: (maxStep * 180) / Math.PI, hidden };
+    return { minY, inBox, maxStepDeg: (maxStep * 180) / Math.PI, hidden, outside };
   }
 
   for (const dir of [1, -1] as const) {
@@ -118,6 +124,7 @@ describe('close-up chase lap (all hotels)', () => {
       expect(r.inBox).toBe(0);
       expect(r.maxStepDeg).toBeLessThanOrEqual(3);
       expect(r.hidden).toBe(0);
+      expect(r.outside).toBe(0);
     });
   }
 });

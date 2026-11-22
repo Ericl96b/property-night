@@ -352,6 +352,22 @@ Fixes the approved complaint that houses were hard to see and hidden by tokens.
 
 ### 10.7 Camera
 
+Two styles (Settings → Camera style, saved with the settings, default **Close-up**; Stage 2, spec `docs/stage2/SPEC-closeup-camera.md`). Both write the camera through the same shot path. **Reduce motion overrides both:** fixed overhead view, no follow, rotation, push-in, nudge, orbit or peek.
+
+**Close-up (default).** The camera eases between *shots* (focus point on the board, yaw, pitch, distance, FOV) with critically damped smoothing on every parameter, yaw by the shortest direction. Starting values live in the `CLOSEUP` tunables at the top of `src/render/cameraDirector.ts` and are tuned from Test board → Camera panel.
+
+- **Home** (turn start; the player chooses Roll / Manage / Trade here): frames the active token's tile, and for a street its whole color group with the buildings on the band, from the side the token is on, turned ≈ 20° toward the direction of travel, pitch ≈ 40°. Corners (and jail) frame the corner plus the first tile of each neighbouring side; other tiles frame themselves and both neighbours.
+- **Dice** (Roll until the dice settle): the Table rest view at the active side's yaw, zoomed in ≈ 10% (zoomed back out if the token would leave the screen). The dice are still thrown into the board's center; the throw starts when the camera has covered ≈ 80% of the move.
+- **Chase** (while the token hops): outside the board edge, behind the token, pitch ≈ 30°, yaw ≈ 40° toward travel, aiming ≈ 1.5 tiles ahead, ≈ 0.30 board units back. The side yaw blends across corners over the corner hop and the hop after it; backwards moves flip the offset. The camera trails slightly, and a leash keeps the whole token inside the free screen area. Glides (Go to Jail, any direct move) pull back to the Table rest view, then settle on the destination.
+- **Landed:** the Home framing of the landed tile, held through the buy prompt, auctions, rent, cards and banners. The big-payment push-in does nothing to the camera here (banner, banknotes and counters still play).
+- **Turn handoff:** one combined move from the Landed shot to the next player's Home shot (side turn and move, ≈ 1.4 s at speed factor 1, scaled like the Table side turn). Doubles go straight from Landed to Dice. Bots use the same shots.
+- **Safe area:** every shot keeps its subject between the left player cards and the right context panel, below the banner zone and above a bottom margin, centered in that region (not the screen). The camera stays ≥ 0.04 above the board and out of building, token, deck and dice boxes, raising its pitch if needed.
+- **Light rig** follows the side yaw only (not the shot's yaw offset or the stick), turning with the same 1.4 s easing when the side changes, so shadows don't swing at corners.
+- **Right stick / Shift + arrows** orbit around the shot's focus (yaw ± 25°, pitch − 5° / + 15°); releasing returns to the shot. **Hold R2 / ZR / C** to peek: the camera eases to the Table rest view on the current side and returns on release. Peek works whenever a game is on screen, menus included (the player asks for it; the game itself never moves the camera during menus).
+- Speed: every camera move scales with the speed setting; Instant snaps each shot; skipping snaps to the shot the animation ends on.
+
+**Table** (the pre-Stage-2 camera, unchanged):
+
 - Perspective camera, vertical FOV ≈ 30° (low distortion), default pitch ≈ 58° from the table plane, distance so the whole board fills ≈ 88% of the screen height at rest with room for the side panels.
 - **Board rotation per active player:** each seat is assigned a board side by turn order (2 players: bottom and top; 3: bottom, left, top; 4: one side each; 5–6 share sides). At the start of each turn the camera rig (with the light rig) orbits around the board center so the active player's side is nearest the viewer. 1.4 s ease-in-out at Normal speed, shortest direction. Setting: Rotation on (default) / off (fixed on seat 1's side).
 - **Gentle follow:** while a token moves, the camera eases toward it (target offset up to 15% of board width, zoom in up to 12%) and keeps the destination tile fully in frame. After the landing resolves it returns to rest over 0.8 s. Large payments add a short push-in on the tile (§10.9).
@@ -442,7 +458,7 @@ State        // rules, board, decks, seats, players, turn, phase, bank, freePark
 
 ## 13. Settings menu (outside rules presets)
 
-Controllers, Speed, Reduce motion, Board rotation (on/off), Camera follow (on/off), Quality (Auto/High/Low), Big-payment thresholds, Undo (on/off), Swap Confirm/Back on Nintendo pads, Volume (master, music, effects), Fullscreen.
+Controllers, Speed, Reduce motion, Camera style (Close-up / Table; §10.7), Board rotation (on/off) and Camera follow (on/off) — both shown for Table style only, Quality (Auto/High/Low), Big-payment thresholds, Undo (on/off), Swap Confirm/Back on Nintendo pads, Volume (master, music, effects), Fullscreen.
 
 ---
 

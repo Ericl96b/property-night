@@ -68,7 +68,10 @@ This file is the hand-off log for unattended work. A resumed session reads it fi
   See DECISIONS.md, "Batch 4". Checks: `node scripts/cdp.mjs scripts/plans/bench.mjs .snapshots`, `node scripts/cdp.mjs scripts/plans/testboard.mjs .snapshots`, `node scripts/cdp.mjs scripts/plans/perf.mjs .snapshots`. Left for the owner: Compare settings on the TV PC at 4K (Windows at 120 Hz, then 60 Hz) and on the laptop; couch readability of the results; test-board controls on both controllers.
 
 - [x] **Batch 5** (owner request, 2026-11-22): Pink and Yellow swap places. Yellow (Goldfinch Lane, Honey Street, Buttercup Row, mustard #D4A72C) is on tiles 11/13/14 and Pink (Rose Court, Peony Place, Rosewood Lane, #F569D7) on tiles 26/27/29. Prices stay with position. Old saves and user board presets are wiped once; `SAVE_VERSION` is 2. See DECISIONS.md, "Batch 5". Check: `node scripts/cdp.mjs scripts/plans/batch5.mjs .snapshots`.
+- [x] **Stage 2** (owner request, 2026-11-22): close-up follow camera (new default Camera style; Table unchanged), hold R2 / ZR / C to peek, test board Camera panel, benchmark on the close-up shots. See DECISIONS.md, "Stage 2", and `docs/stage2/report.md`. Check: `node scripts/cdp.mjs scripts/plans/stage2.mjs .snapshots` (`PN_QUALITY=low` for Low). **Not pushed yet:** waiting for the owner's OUTPOST baseline benchmark.
 
 ## Open questions for the owner
 
-None. The four alpha questions were answered on 2026-11-18. The owner has more fixes and additions planned; they will arrive as a separate batch.
+- Stage 2: the active token hides part of the landed property's name in Home / Landed shots (options in `docs/stage2/report.md`).
+
+Otherwise none. The four alpha questions were answered on 2026-11-18. The owner has more fixes and additions planned; they will arrive as a separate batch.

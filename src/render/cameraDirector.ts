@@ -196,6 +196,8 @@ export class CameraDirector {
   private start: ShotPose = { ...this.cur };
   private smooth = CLOSEUP.shotSmooth;
   private chasing = false;
+  /** Live position of the chased token (the leash keeps it inside the safe area). */
+  private chaseToken: THREE.Vector3 | null = null;
   private peekOn = false;
   private peekW = 0;
   private lastViewYaw = 0;
@@ -423,8 +425,10 @@ export class CameraDirector {
   chase(info: ChaseInfo | null): void {
     if (!info) {
       this.chasing = false;
+      this.chaseToken = null;
       return;
     }
+    this.chaseToken = info.token ? info.token.clone() : tokenPoint(info.s);
     const pose = this.chasePose(info);
     if (!this.chasing) {
       this.chasing = true;
@@ -531,6 +535,7 @@ export class CameraDirector {
     let closeMoving = false;
     if (this.closeup) {
       closeMoving = this.stepSpring(dt);
+      if (this.chasing) this.leash();
       const pw = this.peekOn ? 1 : 0;
       if (this.speed === Infinity) this.peekW = pw;
       else {
@@ -552,6 +557,34 @@ export class CameraDirector {
       this.apply();
     }
     return !settled || closeMoving;
+  }
+
+  /**
+   * The chase trails the token, so on a fast hop or a corner the lagging camera could let it
+   * slip out of frame. Slide the current focus (not the goal) just enough to keep the whole
+   * token inside the safe area (Stage 2 §2.3: the token never leaves it).
+   */
+  private leash(): void {
+    const tok = this.chaseToken;
+    if (!tok) return;
+    const pts = [tok.clone().setY(BOARD_TOP), tok.clone().setY(BOARD_TOP + TOKEN_HEIGHT)];
+    const s = this.safe;
+    const inset = 0.02;
+    const half = Math.tan((this.cur.fov * DEG) / 2);
+    const right = new THREE.Vector3(Math.cos(this.cur.yaw), 0, -Math.sin(this.cur.yaw));
+    const forward = new THREE.Vector3(-Math.sin(this.cur.yaw), 0, -Math.cos(this.cur.yaw));
+    for (let i = 0; i < 4; i++) {
+      const b = projectBounds(pts, new THREE.Vector3(this.cur.fx, BOARD_TOP, this.cur.fz), this.cur.yaw, this.cur.pitch, this.cur.distance, this.cur.fov, this.viewport.aspect);
+      if (!b) return;
+      const ex = b.xMin < s.xMin + inset ? b.xMin - (s.xMin + inset) : b.xMax > s.xMax - inset ? b.xMax - (s.xMax - inset) : 0;
+      const ey = b.yMin < s.yMin + inset ? b.yMin - (s.yMin + inset) : b.yMax > s.yMax - inset ? b.yMax - (s.yMax - inset) : 0;
+      if (!ex && !ey) return;
+      const d = this.cur.distance;
+      const dx = right.clone().multiplyScalar(ex * d * half * this.viewport.aspect);
+      const dz = forward.clone().multiplyScalar((ey * d * half) / Math.max(0.2, Math.sin(this.cur.pitch)));
+      this.cur.fx += dx.x + dz.x;
+      this.cur.fz += dx.z + dz.z;
+    }
   }
 
   /** Critically damped step of every pose parameter (SmoothDamp). Returns true while moving. */

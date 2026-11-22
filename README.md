@@ -30,7 +30,7 @@ Review URL parameters: `?quality=high|low`, `?seed=N`, `?speed=slow|normal|fast|
 
 Graphics settings (pause menu, independent of Quality): Ambient occlusion (off by default), Brightness 70–130%, Tone mapping Filmic (ACES) / AgX / Neutral.
 
-Performance (Batch 4): **Settings → Performance** has the *Performance overlay* (Off / FPS / Detailed) and **Run benchmark…** (Quick ≈ 20 s, Standard ≈ 65 s, Compare settings ≈ 3 min; results with a verdict, per-phase table and suggestions; Copy results / Export JSON; last 10 results kept). The benchmark is only available from the main menu. **Main menu → Test board** is a no-rules sandbox: presets (Empty, All houses, All hotels, Worst case, One group), and on the selected property Add/Remove building, Owner, Mortgage, Pledge and Close-up.
+Performance (Batch 4): **Settings → Performance** has the *Performance overlay* (Off / FPS / Detailed) and **Run benchmark…** (Quick ≈ 20 s, Standard ≈ 65 s, Compare settings ≈ 3 min; results with a verdict, per-phase table and suggestions; Copy results / Export JSON; last 10 results kept). The benchmark is only available from the main menu. **Main menu → Test board** is a no-rules sandbox: presets (Empty, All houses, All hotels, Worst case, One group), and on the selected property Add/Remove building, Owner, Mortgage, Pledge and Close-up. **Camera panel** (Stage 2) tunes the close-up camera: shot picker, a slider for every `CLOSEUP` value, Play a move and Copy values (see [docs/stage2/report.md](docs/stage2/report.md)).
 
 | Test board | Keyboard | Controller |
 | --- | --- | --- |
