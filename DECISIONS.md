@@ -384,3 +384,16 @@ ManagePanel became the Inventory binder, TradePanel became Trade ("Across the Ta
 - **Teacup:** the handoff `teacup.svg` was replaced by the fixed copy (duplicate `opacity` removed). The app builds tokens in code and never loaded it.
 - **Old plans:** `m3`, `m6`, `m7` now open Inventory; `m5` drove the old TradePanel and is marked superseded by `stage3.mjs`.
 - **Open:** hold-to-accept feel and both pads on the TV are untested here (no pads on the dev laptop).
+
+## Render resolution, Part A (owner request, 2026-11-23)
+
+- **One source for the pixel ratio:** `Renderer.getRenderPixelRatio()` (rules in `src/render/resolution.ts`). Matched by height and clamped to the canvas's physical pixels, so it never supersamples. When the selection reaches the canvas's physical height it returns `devicePixelRatio` exactly, so native output is the same as before.
+- **Canvas CSS size:** three no longer writes it (`setSize(…, false)`). `.scene-canvas` is `width/height: 100%`, and the browser upscales the drawing buffer to that size. The HTML UI is never scaled.
+- **Post chain:** the composer, MSAA target, GTAO targets and FXAA's resolution uniform all follow `composer.setPixelRatio/setSize`. There is no GPU picking buffer. The test-board raycast now normalises against the canvas's CSS box.
+- **Live triggers:** window `resize`, `fullscreenchange`, and a self-re-arming `matchMedia('(resolution: Ndppx)')` for monitor moves.
+- **1080p is never greyed out.** It is the floor. A display smaller than 1080p uses it, clamped to the canvas, so the control always has one valid choice. 1440p and 4K are disabled with "— Above this display" when they exceed the display. Confirm-wrap on a select now skips disabled options.
+- **Persistence:** `renderHeight` lives in the per-browser settings blob only. On first launch it is derived from the display. A stored value above the current display is kept, and the clamp handles it. `?res=1080|1440|2160` overrides it for testing, like `?ao`.
+- **Benchmark:** the pick screen has its own Resolution override, which defaults to the saved setting and is restored after the run. Results and Copy show `Render: W×H`. The "not native resolution" suggestion now compares against the chosen resolution, so a deliberate 1440p choice doesn't warn.
+- **Debug overlay:** Performance overlay → Detailed shows `Buffer W × H · Display W × H`.
+- **Headless checks:** `cdp.mjs` now emulates a screen the size of the window. `scripts/plans/resolution.mjs` checks a 4K TV at 150% (`PN_W/PN_H/PN_DPR` for other displays).
+- **Part B (idle rendering)** waits for Part A to be verified on hardware. Most of it already exists: render-on-demand, and gamepad polling on its own rAF loop.

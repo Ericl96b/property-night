@@ -7,6 +7,7 @@
   import { layer } from '../menuStack';
   import { getContext } from 'svelte';
   import { glyphFor, type GlyphFamily } from '../present';
+  import { RESOLUTIONS, aboveDisplay, displayPhysical, type RenderHeight } from '../../render/resolution';
 
   let {
     gs,
@@ -39,6 +40,10 @@
   const STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
   const BRIGHTNESS = [70, 80, 90, 100, 110, 120, 130];
 
+  // Resolution: the display's physical pixels (refreshed on resize, which fires on a monitor move).
+  const readDisplay = () => displayPhysical(screen, window.devicePixelRatio || 1);
+  let display = $state(readDisplay());
+
   // Stage 2 controls list: lettered discs follow the acting controller's family.
   const glyphs = getContext<{ family: GlyphFamily; swap: boolean } | undefined>('glyphs');
   const disc = (g: 'peek' | 'nudge') => glyphFor(g, glyphs?.family ?? 'playstation').letter;
@@ -47,6 +52,7 @@
   const humans = $derived(gs ? gs.seats.map((s, i) => ({ s, i })).filter(({ s, i }) => s.kind === 'human' && !gs.players[i].bankrupt) : []);
 </script>
 
+<svelte:window onresize={() => (display = readDisplay())} />
 <div class="dim"></div>
 <div class="panel pause">
   <div class="eyebrow">Paused</div>
@@ -97,6 +103,14 @@
             <option value="auto">Auto</option><option value="high">High</option><option value="low">Low</option>
           </select>
         </label>
+        <label>Resolution
+          <select class="res" value={String(settings.renderHeight)} onchange={(e) => onsetting({ renderHeight: Number((e.currentTarget as HTMLSelectElement).value) as RenderHeight })}>
+            {#each RESOLUTIONS as r (r.h)}
+              <option value={String(r.h)} disabled={aboveDisplay(r.h, display.h)}>{r.label}{aboveDisplay(r.h, display.h) ? ' — Above this display' : ''}</option>
+            {/each}
+          </select>
+        </label>
+        <div class="note" data-testid="display-note">Your display: {display.w}×{display.h}</div>
         <label>Ambient occlusion
           <select value={settings.ambientOcclusion ? 'on' : 'off'} onchange={(e) => onsetting({ ambientOcclusion: (e.currentTarget as HTMLSelectElement).value === 'on' })}>
             <option value="off">Off</option><option value="on">On</option>
@@ -236,6 +250,11 @@
   }
   .settings .chk {
     justify-content: flex-start;
+  }
+  /* Resolution labels are long ("2560×1440 (QHD / 1440p)"): room for the text and both arrows. */
+  select.res {
+    width: 280px;
+    padding-inline: 28px;
   }
   select,
   input[type='number'] {

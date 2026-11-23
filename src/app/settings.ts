@@ -2,6 +2,7 @@
 // moves into IndexedDB with saves in M9). Every access is guarded: storage may be unavailable.
 import type { Speed } from '../director/queue';
 import type { QualitySetting } from '../render/quality';
+import { defaultResolution, displayPhysical, isRenderHeight, type RenderHeight } from '../render/resolution';
 
 export interface Settings {
   speed: Speed;
@@ -27,6 +28,12 @@ export interface Settings {
   everyPayment: boolean;
   /** Performance overlay (Batch 4): off by default so normal play is unchanged. */
   perfOverlay: PerfOverlaySetting;
+  /**
+   * Internal render height of the 3D canvas (SPEC_render_resolution). Per machine: lives only in
+   * this localStorage blob, never in saves or presets. A value above the current display is kept;
+   * the renderer clamps it.
+   */
+  renderHeight: RenderHeight;
 }
 
 export type PerfOverlaySetting = 'off' | 'fps' | 'detailed';
@@ -54,14 +61,35 @@ export const DEFAULT_SETTINGS: Settings = {
   toneMapping: 'aces',
   everyPayment: true,
   perfOverlay: 'off',
+  renderHeight: 2160,
 };
 
 const KEY = 'property-night.settings.v1';
 
+/** The display's physical height, or null where there is no screen (tests, workers). */
+function displayHeight(): number | null {
+  try {
+    const s = globalThis.screen;
+    const dpr = globalThis.devicePixelRatio || 1;
+    return s ? displayPhysical(s, dpr).h : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A stored choice is kept as is (even above this display); otherwise the first-launch default. */
+export function resolveRenderHeight(stored: unknown, displayH: number | null): RenderHeight {
+  if (isRenderHeight(stored)) return stored;
+  return displayH === null ? DEFAULT_SETTINGS.renderHeight : defaultResolution(displayH);
+}
+
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...DEFAULT_SETTINGS, ...parsed, renderHeight: resolveRenderHeight(parsed?.renderHeight, displayHeight()) };
+    }
   } catch {
     /* storage unavailable */
   }
@@ -72,7 +100,7 @@ export function loadSettings(): Settings {
   } catch {
     /* no matchMedia */
   }
-  return { ...DEFAULT_SETTINGS, reduceMotion };
+  return { ...DEFAULT_SETTINGS, reduceMotion, renderHeight: resolveRenderHeight(undefined, displayHeight()) };
 }
 
 export function saveSettings(s: Settings): void {

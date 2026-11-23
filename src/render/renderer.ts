@@ -11,6 +11,7 @@ import type { QualityProfile } from './quality';
 import { SampleRing, type FrameSample } from '../perf/samples';
 import { GpuTimer } from '../perf/gpuTimer';
 import { estimateRefresh } from '../perf/refresh';
+import { renderPixelRatio } from './resolution';
 
 /** Graphics options outside the Quality preset (owner request, 2026-11-18). */
 export interface GraphicsOptions {
@@ -57,10 +58,12 @@ export class Renderer {
   private timer?: GpuTimer;
   private lastRenderAt = 0;
 
+  /** Selected internal render height (SPEC_render_resolution); clamped to the canvas's pixels. */
+  private renderHeight: number = 2160;
+
   constructor(container: HTMLElement, camera: THREE.PerspectiveCamera) {
     this.camera = camera;
     this.gl = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false });
-    this.gl.setPixelRatio(window.devicePixelRatio);
     this.gl.outputColorSpace = THREE.SRGBColorSpace;
     this.gl.toneMapping = THREE.ACESFilmicToneMapping;
     this.gl.toneMappingExposure = 1.0;
@@ -70,8 +73,46 @@ export class Renderer {
     this.gl.info.autoReset = false;
     this.gl.domElement.className = 'scene-canvas';
     container.appendChild(this.gl.domElement);
+    this.gl.setPixelRatio(this.getRenderPixelRatio());
     this.scene.background = new THREE.Color(0x120a06);
     window.addEventListener('resize', () => this.resize());
+    document.addEventListener('fullscreenchange', () => this.resize());
+    this.watchDpr();
+  }
+
+  /** Recompute when the window moves to a monitor with a different devicePixelRatio. */
+  private watchDpr(): void {
+    try {
+      const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      mq.addEventListener('change', () => {
+        this.resize();
+        this.watchDpr();
+      }, { once: true });
+    } catch {
+      /* no matchMedia */
+    }
+  }
+
+  /**
+   * The one place the main canvas's pixel ratio comes from: the selected render height,
+   * clamped to the canvas's physical pixels (exactly the device pixel ratio at native).
+   */
+  getRenderPixelRatio(): number {
+    const el = this.gl.domElement;
+    const clientH = el.clientHeight || window.innerHeight;
+    return renderPixelRatio(this.renderHeight, clientH, window.devicePixelRatio || 1);
+  }
+
+  /** The selected render height (the drawing buffer may be smaller in a small window). */
+  get selectedRenderHeight(): number {
+    return this.renderHeight;
+  }
+
+  /** Change the internal render resolution live (no reload). */
+  setRenderHeight(h: number): void {
+    if (h === this.renderHeight) return;
+    this.renderHeight = h;
+    this.resize();
   }
 
   get maxAnisotropy(): number {
@@ -93,6 +134,7 @@ export class Renderer {
     this.composer?.dispose();
     this.gtao?.dispose();
     this.gtao = undefined;
+    this.gl.setPixelRatio(this.getRenderPixelRatio());
     const size = this.gl.getDrawingBufferSize(new THREE.Vector2());
     const rt = new THREE.WebGLRenderTarget(size.x, size.y, {
       type: THREE.HalfFloatType,
@@ -120,11 +162,16 @@ export class Renderer {
   }
 
   resize(): void {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    this.gl.setPixelRatio(window.devicePixelRatio);
-    this.gl.setSize(w, h);
-    this.composer?.setPixelRatio(window.devicePixelRatio);
+    // CSS size comes from the stylesheet (the canvas fills the window); three only sizes the
+    // drawing buffer (updateStyle=false), and the browser upscales it to the CSS size.
+    const el = this.gl.domElement;
+    const w = el.clientWidth || window.innerWidth;
+    const h = el.clientHeight || window.innerHeight;
+    const pr = this.getRenderPixelRatio();
+    this.gl.setPixelRatio(pr);
+    this.gl.setSize(w, h, false);
+    // Composer, its render targets, GTAO's targets and FXAA's resolution uniform all follow.
+    this.composer?.setPixelRatio(pr);
     this.composer?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();

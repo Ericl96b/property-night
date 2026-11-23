@@ -1,7 +1,7 @@
 <script lang="ts">
   // Benchmark (Batch 4, SPEC-benchmark §3): mode picker → progress strip → results screen.
   // Uses the existing panel style and the stats panel's type sizes (readable from the couch).
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import type { PerfApi } from '../../bench/perfApi';
   import { copyText } from '../../bench/perfApi';
   import { estimatedSeconds, type BenchProgress } from '../../bench/benchmark';
@@ -9,6 +9,8 @@
   import { BOTTLENECK_LABEL } from '../../perf/verdict';
   import { downloadText } from '../../app/presets';
   import ActionButton from './ActionButton.svelte';
+  import { RESOLUTIONS, aboveDisplay, displayPhysical, type RenderHeight } from '../../render/resolution';
+  import { renderLabel } from '../../perf/summary';
 
   let { perf, onclose, onrunning }: { perf: PerfApi; onclose: () => void; onrunning: (on: boolean) => void } = $props();
 
@@ -33,6 +35,9 @@
     const s = estimatedSeconds(mode) + (mode === 'quick' ? 8 : 0);
     return s >= 90 ? `≈ ${Math.round(s / 60)} min` : `≈ ${Math.round(s / 10) * 10} s`;
   };
+  // Resolution override for the run (defaults to the saved setting; never saved from here).
+  const display = displayPhysical(screen, window.devicePixelRatio || 1);
+  let benchRes = $state<RenderHeight>(untrack(() => perf.renderHeight()));
   const lastFor = (mode: BenchMode) => history.find((h) => h.mode === mode) ?? null;
 
   async function run(mode: BenchMode) {
@@ -43,7 +48,7 @@
     abort = new AbortController();
     let s: BenchSummary | null = null;
     try {
-      s = await perf.run(mode, (p) => (progress = p), abort.signal);
+      s = await perf.run(mode, (p) => (progress = p), abort.signal, benchRes);
     } catch (e) {
       message = `The benchmark stopped: ${(e as Error).message}`;
     } finally {
@@ -105,8 +110,15 @@
     <div class="eyebrow">Performance</div>
     {#if stage === 'pick'}
       <div class="title">Benchmark</div>
-      <div class="lead">A fixed, repeatable run on a fully built board. It uses your current graphics settings and doesn't touch saved games.</div>
+      <div class="lead">A fixed, repeatable run on a fully built board. It uses your current graphics settings (resolution below) and doesn't touch saved games.</div>
       <div class="col">
+        <label class="res">Resolution
+          <select value={String(benchRes)} onchange={(e) => (benchRes = Number((e.currentTarget as HTMLSelectElement).value) as RenderHeight)}>
+            {#each RESOLUTIONS as r (r.h)}
+              <option value={String(r.h)} disabled={aboveDisplay(r.h, display.h)}>{r.label}{aboveDisplay(r.h, display.h) ? ' — Above this display' : ''}</option>
+            {/each}
+          </select>
+        </label>
         {#each MODES as m (m.mode)}
           <ActionButton label={m.label} hint={dur(m.mode)} primary={m.mode === 'standard'} glyph={m.mode === 'standard' ? 'confirm' : undefined} onclick={() => run(m.mode)} />
           {#if lastFor(m.mode)}<div class="last">Last run: {lastFor(m.mode)!.verdict}</div>{/if}
@@ -124,7 +136,7 @@
         <div><span>Graphics card</span>{result.system.gpu}</div>
         <div><span>Rendered</span>{result.system.bufferW} × {result.system.bufferH} (CSS {result.system.cssW} × {result.system.cssH} × DPR {result.system.dpr.toFixed(1)})</div>
         <div><span>Display</span>{result.system.hz} Hz (measured {result.system.hzRaw.toFixed(1)})</div>
-        <div><span>Settings</span>{result.player.quality === 'high' ? 'High' : 'Low'} · AO {result.player.ao ? 'on' : 'off'} · tone mapping {TONE[result.player.toneMapping] ?? result.player.toneMapping}</div>
+        <div><span>Settings</span>{result.player.quality === 'high' ? 'High' : 'Low'} · AO {result.player.ao ? 'on' : 'off'}{result.system.renderHeight ? ` · Render: ${renderLabel(result.system.renderHeight)}` : ''} · tone mapping {TONE[result.player.toneMapping] ?? result.player.toneMapping}</div>
         <div><span>CPU threads</span>{result.system.threads}</div>
         <div><span>GPU timer</span>{result.system.gpuTimer ? 'yes' : 'not available in this browser (GPU time not shown)'}</div>
         <div><span>Date</span>{new Date(result.date).toLocaleString()}</div>
@@ -208,6 +220,25 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+  /* Resolution override row: same look as the Settings rows. */
+  label.res {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    font: 600 17px/1.2 'Source Sans 3', sans-serif;
+    min-height: 44px;
+  }
+  label.res select {
+    height: 40px;
+    width: 300px;
+    font: 600 17px 'Source Sans 3', sans-serif;
+    padding-inline: 28px;
+    border-radius: 8px;
+    border: 1.5px solid rgba(43, 33, 25, 0.3);
+    background-color: #fff;
+    color: var(--ink);
   }
   .benchp.wide {
     width: 1240px;

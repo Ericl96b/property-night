@@ -86,11 +86,14 @@ export function recommend(inp: RecInput): Recommendation[] {
     });
   }
 
-  // 3. Not drawing at the screen's native resolution.
+  // 3. Not drawing at the expected resolution: the screen's native size, or the chosen Render
+  // resolution when that is lower (a deliberate choice, not a problem).
   const nativeW = Math.round(sys.screenW * sys.dpr);
   const nativeH = Math.round(sys.screenH * sys.dpr);
-  const short = sys.bufferW < nativeW * 0.98 || sys.bufferH < nativeH * 0.98;
-  const screen4k = nativeW >= 3840 && nativeH >= 2160;
+  const targetH = Math.min(nativeH, sys.renderHeight ?? nativeH);
+  const targetW = Math.round((nativeW * targetH) / nativeH);
+  const short = sys.bufferW < targetW * 0.98 || sys.bufferH < targetH * 0.98;
+  const screen4k = nativeW >= 3840 && nativeH >= 2160 && targetH >= 2160;
   if (short || (screen4k && (sys.bufferW < 3840 * 0.98 || sys.bufferH < 2160 * 0.98))) {
     out.push({
       id: 'resolution',

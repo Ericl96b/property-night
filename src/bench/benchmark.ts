@@ -9,6 +9,7 @@ import { CLASSIC_BOARD } from '../data/classicBoard';
 import type { State } from '../engine';
 import type { FrameSample } from '../perf/samples';
 import { gpuName } from '../render/quality';
+import type { RenderHeight } from '../render/resolution';
 import { renderPortraits } from '../render/portraits';
 import { computeStats } from '../perf/stats';
 import { targets } from '../perf/verdict';
@@ -106,6 +107,7 @@ export function systemInfo(scene: GameScene, hz: number, hzRaw: number): SystemI
     threads: navigator.hardwareConcurrency ?? 0,
     maxTexture: r.gl.capabilities.maxTextureSize,
     gpuTimer: r.gpuTimerAvailable,
+    renderHeight: r.selectedRenderHeight,
   };
 }
 
@@ -113,9 +115,11 @@ export function systemInfo(scene: GameScene, hz: number, hzRaw: number): SystemI
  * Run the benchmark. Resolves with the summary, or null when cancelled (Back / Escape).
  * Continuous rendering, speed, camera options and graphics settings are always restored.
  */
-export async function runBenchmark(env: BenchEnv, mode: BenchMode, onProgress: (p: BenchProgress) => void, signal: AbortSignal): Promise<BenchSummary | null> {
+export async function runBenchmark(env: BenchEnv, mode: BenchMode, onProgress: (p: BenchProgress) => void, signal: AbortSignal, renderHeight?: RenderHeight): Promise<BenchSummary | null> {
   const { scene, director, settings } = env;
   const r = scene.renderer;
+  // Resolution override for this run only (restored below, never saved).
+  if (renderHeight) r.setRenderHeight(renderHeight);
   const cam = scene.camera;
   const savedCamera = { ...cam.settings };
   const player: PlayerConfig = { quality: scene.quality.level, ao: settings.ambientOcclusion, toneMapping: settings.toneMapping, exposure: settings.brightness };
@@ -197,6 +201,7 @@ export async function runBenchmark(env: BenchEnv, mode: BenchMode, onProgress: (
       await scene.setQuality(settings.quality);
       r.setGraphics({ ao: settings.ambientOcclusion, ...graphics() });
     }
+    r.setRenderHeight(settings.renderHeight);
     env.setBenchState(null);
     r.requestRender();
   }

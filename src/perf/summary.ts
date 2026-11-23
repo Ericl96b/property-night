@@ -2,6 +2,7 @@
 import type { FrameStats } from './stats';
 import type { Classification, TargetResult } from './verdict';
 import { BOTTLENECK_LABEL } from './verdict';
+import { isRenderHeight, resolutionShort } from '../render/resolution';
 
 export type BenchMode = 'quick' | 'standard' | 'compare';
 export type QualityLevel = 'high' | 'low';
@@ -51,6 +52,8 @@ export interface SystemInfo {
   threads: number;
   maxTexture: number;
   gpuTimer: boolean;
+  /** Selected render resolution height (SPEC_render_resolution); absent in older results. */
+  renderHeight?: number;
 }
 
 export interface Recommendation {
@@ -121,6 +124,11 @@ export function findPrevious(list: BenchSummary[], s: BenchSummary): BenchSummar
   return list.find((x) => x.id !== s.id && configKey(x) === key) ?? null;
 }
 
+/** "2560×1440" for a selected render height. */
+export function renderLabel(h: number): string {
+  return isRenderHeight(h) ? resolutionShort(h) : `${h}p`;
+}
+
 const f0 = (n: number) => Math.round(n).toString();
 const f1 = (n: number | null) => (n === null ? 'n/a' : n.toFixed(1));
 const mark = (ok: boolean | null) => (ok === null ? '?' : ok ? 'ok' : 'low');
@@ -135,7 +143,7 @@ export function formatCopy(s: BenchSummary): string {
     `GPU: ${sys.gpu}`,
     `Rendered: ${sys.bufferW} x ${sys.bufferH} (CSS ${sys.cssW} x ${sys.cssH} x DPR ${sys.dpr.toFixed(2)}; screen ${sys.screenW} x ${sys.screenH})`,
     `Display: ${sys.hz} Hz (measured ${sys.hzRaw.toFixed(1)})`,
-    `Settings: ${s.player.quality === 'high' ? 'High' : 'Low'}, AO ${s.player.ao ? 'on' : 'off'}, tone mapping ${s.player.toneMapping}`,
+    `Settings: ${s.player.quality === 'high' ? 'High' : 'Low'}, AO ${s.player.ao ? 'on' : 'off'}${sys.renderHeight ? `, Render: ${renderLabel(sys.renderHeight)}` : ''}, tone mapping ${s.player.toneMapping}`,
     `CPU threads: ${sys.threads}; GPU timer: ${sys.gpuTimer ? 'yes' : 'not available in this browser'}`,
   ];
   for (const run of s.runs) {

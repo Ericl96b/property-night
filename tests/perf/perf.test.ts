@@ -194,6 +194,13 @@ describe('recommendations', () => {
     expect(ids(input(smooth120, { screenW: 3840, screenH: 2160, dpr: 1, bufferW: 1920, bufferH: 1080, cssW: 1920, cssH: 1080 }))).toContain('resolution');
   });
 
+  it('3. a chosen lower render resolution is not a problem, but falling short of it is', () => {
+    const tv = { screenW: 2560, screenH: 1440, dpr: 1.5, cssW: 2560, cssH: 1440 };
+    expect(ids(input(smooth120, { ...tv, renderHeight: 1440, bufferW: 2560, bufferH: 1440 }))).not.toContain('resolution');
+    expect(ids(input(smooth120, { ...tv, renderHeight: 2160, bufferW: 2560, bufferH: 1440 }))).toContain('resolution');
+    expect(ids(input(smooth120, { ...tv, renderHeight: 1440, bufferW: 1920, bufferH: 1080 }))).toContain('resolution');
+  });
+
   it('4. display at 30 Hz', () => {
     const r30 = run(HI, { interval: 33.3, gpu: 3 }, null, 30);
     expect(ids(input(r30, { hz: 30 }))).toContain('refresh30');

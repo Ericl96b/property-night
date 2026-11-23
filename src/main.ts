@@ -10,6 +10,7 @@ import { renderPortraits } from './render/portraits';
 import { startKeyboard, type Intent } from './input/keys';
 import { InputManager, browserStore } from './input/manager';
 import type { QualitySetting } from './render/quality';
+import { isRenderHeight } from './render/resolution';
 import type { Speed } from './director/queue';
 import type { NewGameConfig, SeatConfig, State } from './engine';
 import { rollDie, seedRng } from './engine/rng';
@@ -78,6 +79,9 @@ async function boot(): Promise<void> {
 
   const ao = params.get('ao');
   if (ao === '1' || ao === '0') settings.ambientOcclusion = ao === '1';
+  // Dev/test override like ?ao: ?res=1080|1440|2160.
+  const res = Number(params.get('res'));
+  if (isRenderHeight(res)) settings.renderHeight = res;
 
   const scene = await GameScene.create(root, CLASSIC_BOARD, settings.quality);
   performance.mark('pn-scene');
@@ -134,6 +138,7 @@ async function boot(): Promise<void> {
     if (changed && controller.state && !director.busy) director.resetCamera(controller.state);
     scene.camera.apply();
     scene.renderer.setGraphics({ ao: settings.ambientOcclusion, exposure: settings.brightness, toneMapping: settings.toneMapping });
+    scene.renderer.setRenderHeight(settings.renderHeight);
     scene.renderer.requestRender();
   };
   applySettings();
@@ -218,12 +223,14 @@ async function boot(): Promise<void> {
   const perf: PerfApi = {
     renderer: scene.renderer,
     history: new BenchHistory(kv),
-    run: (mode, onProgress, signal) =>
+    renderHeight: () => settings.renderHeight,
+    run: (mode, onProgress, signal, renderHeight) =>
       runBenchmark(
         { scene, director, settings, ensureBoard: (b) => ensureBoard(b, CLASSIC_RULES), setBenchState: (st) => app.setBenchState(st) },
         mode,
         onProgress,
         signal,
+        renderHeight,
       ),
     enterTestBoard: () => {
       testBoard ??= new TestBoard({ scene, director, sound, ensureBoard: (b) => ensureBoard(b, CLASSIC_RULES), onChange: () => app.testBoardChanged() }, CLASSIC_BOARD);
@@ -247,7 +254,9 @@ async function boot(): Promise<void> {
   const boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -BOARD_TOP);
   scene.renderer.gl.domElement.addEventListener('pointerdown', (e) => {
     if (!inTestBoard || !testBoard) return;
-    const ndc = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+    // CSS pixels against the canvas's CSS box: independent of the render resolution.
+    const r = scene.renderer.gl.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, scene.camera.camera);
     const hit = ray.ray.intersectPlane(boardPlane, new THREE.Vector3());
     const tile = hit ? tileAt(hit.x, hit.z) : null;

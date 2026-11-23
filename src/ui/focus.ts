@@ -142,8 +142,12 @@ export function activate(el: HTMLElement): boolean {
   }
   if (el instanceof HTMLSelectElement) {
     if (!stepControl(el, 1)) {
-      el.selectedIndex = 0;
-      fire(el);
+      // Wrap to the first enabled option (disabled ones, e.g. "Above this display", are skipped).
+      const first = Array.from(el.options).findIndex((o) => !o.disabled);
+      if (first >= 0 && first !== el.selectedIndex) {
+        el.selectedIndex = first;
+        fire(el);
+      }
     }
     return true;
   }

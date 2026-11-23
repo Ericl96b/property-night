@@ -4,12 +4,15 @@ import type { BenchMode, BenchSummary } from '../perf/summary';
 import type { BenchProgress } from './benchmark';
 import type { BenchHistory } from './history';
 import type { TestBoard } from './testBoard';
+import type { RenderHeight } from '../render/resolution';
 
 export interface PerfApi {
   renderer: Renderer;
   history: BenchHistory;
   /** Run the benchmark (null when cancelled). The scene is left showing the benchmark board. */
-  run(mode: BenchMode, onProgress: (p: BenchProgress) => void, signal: AbortSignal): Promise<BenchSummary | null>;
+  run(mode: BenchMode, onProgress: (p: BenchProgress) => void, signal: AbortSignal, renderHeight?: RenderHeight): Promise<BenchSummary | null>;
+  /** The player's saved render resolution (the benchmark's default override). */
+  renderHeight(): RenderHeight;
   /** Enter the test board (creates it on first use, then re-enters with its layout). */
   enterTestBoard(): TestBoard;
   /** Leave the test board and clean the scene. */

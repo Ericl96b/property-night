@@ -5,6 +5,7 @@
   import { onMount } from 'svelte';
   import type { Renderer } from '../../render/renderer';
   import { computeStats } from '../../perf/stats';
+  import { displayPhysical } from '../../render/resolution';
 
   let { renderer, mode, info }: { renderer: Renderer; mode: 'fps' | 'detailed'; info: () => string } = $props();
 
@@ -24,7 +25,9 @@
     const now = performance.now();
     idle = !renderer.lastFrameAt || now - renderer.lastFrameAt > 500;
     const b = renderer.drawingBufferSize;
-    buffer = `${b.width} × ${b.height}`;
+    const d = displayPhysical(screen, window.devicePixelRatio || 1);
+    // Debug check for the render resolution: the actual drawing buffer vs the display's pixels.
+    buffer = `Buffer ${b.width} × ${b.height} · Display ${d.w} × ${d.h}`;
     infoText = info();
     if (idle) return;
     const samples = renderer.recent(1000);

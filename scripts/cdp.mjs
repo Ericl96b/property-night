@@ -83,7 +83,8 @@ const evaluate = async (expr) => {
 
 await send('Runtime.enable');
 await send('Page.enable');
-await send('Emulation.setDeviceMetricsOverride', { width: plan.width ?? 1920, height: plan.height ?? 1080, deviceScaleFactor: plan.dpr ?? 1, mobile: false });
+// The emulated screen matches the window (a fullscreen game), unless the plan says otherwise.
+await send('Emulation.setDeviceMetricsOverride', { width: plan.width ?? 1920, height: plan.height ?? 1080, deviceScaleFactor: plan.dpr ?? 1, mobile: false, screenWidth: plan.screenWidth ?? plan.width ?? 1920, screenHeight: plan.screenHeight ?? plan.height ?? 1080 });
 await send('Page.navigate', { url: plan.url });
 await sleep(plan.loadWait ?? 3000);
 
