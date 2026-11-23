@@ -1,6 +1,7 @@
 // Renderer + post chain (SPEC §10.3, §10.10): ACES Filmic tone mapping, sRGB output,
-// MSAA 4× render target on High, FXAA on Low. Renders on demand: the loop only runs while
-// something animates or a frame has been requested.
+// MSAA 4× render target on High, FXAA on Low. Renders on demand (SPEC_render_resolution Part B):
+// the loop only draws while something animates (tickers, activities, then a 300 ms tail) or a
+// frame has been requested; otherwise it holds the last frame. Input is polled elsewhere.
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -12,6 +13,7 @@ import { SampleRing, type FrameSample } from '../perf/samples';
 import { GpuTimer } from '../perf/gpuTimer';
 import { estimateRefresh } from '../perf/refresh';
 import { renderPixelRatio } from './resolution';
+import { RenderSchedule } from './renderSchedule';
 
 /** Graphics options outside the Quality preset (owner request, 2026-11-18). */
 export interface GraphicsOptions {
@@ -57,6 +59,9 @@ export class Renderer {
   private multiplier = 1;
   private timer?: GpuTimer;
   private lastRenderAt = 0;
+  private schedule = new RenderSchedule();
+  /** Dev toggle (?render=always): draw every frame. Independent of `continuous`. */
+  private always = false;
 
   /** Selected internal render height (SPEC_render_resolution); clamped to the canvas's pixels. */
   private renderHeight: number = 2160;
@@ -194,15 +199,46 @@ export class Renderer {
     this.wake();
   }
 
+  /** Start an ongoing animation that isn't a ticker; the scene draws until `endActivity`. */
+  beginActivity(id: string): void {
+    this.schedule.begin(id, performance.now());
+    this.wake();
+  }
+
+  /** End an activity; drawing continues for the short tail, then stops. */
+  endActivity(id: string): void {
+    this.schedule.end(id, performance.now());
+    this.wake();
+  }
+
+  /** Dev only: always render (A/B comparison with idle rendering). */
+  setAlwaysRender(on: boolean): void {
+    this.always = on;
+    if (on) this.wake();
+    else this.requestRender();
+  }
+
+  get alwaysRender(): boolean {
+    return this.always;
+  }
+
+  /** ACTIVE while the loop is drawing frames; IDLE while the last frame is held. */
+  get renderState(): 'ACTIVE' | 'IDLE' {
+    return this.running ? 'ACTIVE' : 'IDLE';
+  }
+
+  /** Frames rendered in the last `ms` milliseconds (up to 10 s). */
+  framesInLast(ms: number): number {
+    return this.schedule.framesIn(ms, performance.now());
+  }
+
   get isRunning(): boolean {
     return this.running;
   }
 
   /** Frames per second over the last second of rendered frames (0 when idle). */
   get fps(): number {
-    const now = performance.now();
-    this.frameTimes = this.frameTimes.filter((t) => now - t < 1000);
-    return this.frameTimes.length;
+    return this.schedule.framesIn(1000, performance.now());
   }
 
   /** Resume the loop (tickers run again). */
@@ -221,7 +257,7 @@ export class Renderer {
     this.last = now;
     let active = false;
     for (const t of this.tickers) if (t(dt, now)) active = true;
-    const render = active || this.dirty || this.continuous;
+    const render = this.schedule.shouldRender({ now, tickersActive: active, dirty: this.dirty, continuous: this.continuous, always: this.always });
     if (render) {
       this.dirty = false;
       this.gl.info.reset();
@@ -235,13 +271,16 @@ export class Renderer {
       const calls = Math.round(this.gl.info.render.calls / k);
       const triangles = Math.round(this.gl.info.render.triangles / k);
       this.lastRenderInfo = { calls, triangles };
+      // Kept (last 1200 frames) for the review plans that read it directly.
       this.frameTimes.push(now);
+      if (this.frameTimes.length > 1200) this.frameTimes.splice(0, this.frameTimes.length - 1200);
+      this.schedule.recordFrame(now);
       this.lastRenderAt = now;
       if (inst) this.ring.push(now, interval, performance.now() - t0, calls, triangles);
       this.onFrame?.();
     }
     if (inst) this.timer?.poll((fid, ms) => this.ring.setGpu(fid, ms));
-    if (render || this.continuous) requestAnimationFrame(this.loop);
+    if (render) requestAnimationFrame(this.loop);
     else this.running = false;
   };
 

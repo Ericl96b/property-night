@@ -84,6 +84,9 @@ async function boot(): Promise<void> {
   if (isRenderHeight(res)) settings.renderHeight = res;
 
   const scene = await GameScene.create(root, CLASSIC_BOARD, settings.quality);
+  // Dev only (not in Settings): ?render=always draws every frame, for A/B against idle rendering.
+  // At runtime: __pn.scene.renderer.setAlwaysRender(true | false).
+  if (params.get('render') === 'always') scene.renderer.setAlwaysRender(true);
   performance.mark('pn-scene');
   // The board is sized to the free width between the overlay's side panels (re-fit on resize).
   const fitCamera = (w: number, h: number) => scene.camera.setViewport(w, h, boardMaxNdcX(w, h), safeAreaNdc(w, h));

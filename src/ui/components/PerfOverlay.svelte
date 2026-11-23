@@ -20,6 +20,8 @@
   let buffer = $state('');
   let gpuAvailable = $state(false);
   let infoText = $state('');
+  // Idle rendering debug (Part B): ACTIVE / IDLE, render fps, frames in the last 10 s.
+  let renderLine = $state('');
 
   function update() {
     const now = performance.now();
@@ -29,6 +31,7 @@
     // Debug check for the render resolution: the actual drawing buffer vs the display's pixels.
     buffer = `Buffer ${b.width} × ${b.height} · Display ${d.w} × ${d.h}`;
     infoText = info();
+    renderLine = `Render: ${renderer.renderState} · ${renderer.fps} fps · ${renderer.framesInLast(10_000)} frames / 10 s${renderer.alwaysRender ? ' · always' : ''}`;
     if (idle) return;
     const samples = renderer.recent(1000);
     if (!samples.length) return;
@@ -64,6 +67,7 @@
       <div class="row">frame {n1(interval)} ms · CPU {n1(cpu)} ms · GPU {gpu === null ? (gpuAvailable ? '…' : 'n/a') : `${n1(gpu)} ms`}</div>
       <div class="row">{calls} draw calls · {(tris / 1000).toFixed(0)}k triangles</div>
     {/if}
+    <div class="row" data-testid="render-line">{renderLine}</div>
     <div class="row dim">{buffer} · {infoText}</div>
   {/if}
 </div>

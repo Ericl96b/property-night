@@ -397,3 +397,27 @@ ManagePanel became the Inventory binder, TradePanel became Trade ("Across the Ta
 - **Debug overlay:** Performance overlay → Detailed shows `Buffer W × H · Display W × H`.
 - **Headless checks:** `cdp.mjs` now emulates a screen the size of the window. `scripts/plans/resolution.mjs` checks a 4K TV at 150% (`PN_W/PN_H/PN_DPR` for other displays).
 - **Part B (idle rendering)** waits for Part A to be verified on hardware. Most of it already exists: render-on-demand, and gamepad polling on its own rAF loop.
+
+## Render resolution, Part B: idle rendering (owner request, 2026-11-23)
+
+- **Already on demand before this change:** the renderer drew only while a ticker animated or a frame was requested. Pads are polled on their own rAF loop. Dice are pre-simulated at a fixed 1/120 s and replayed. Part B therefore fills gaps rather than redesigning.
+- **`RenderSchedule` (`src/render/renderSchedule.ts`):** the scene draws while a ticker or named activity is active, plus a **300 ms tail** after the last one ends. Before this, the frame on which an animation finished was skipped unless something else requested a frame. A one-off `requestRender()` has no tail.
+- **API:** `requestRender()` for one frame, and `beginActivity(id)` / `endActivity(id)` for animations that aren't tickers. The existing tickers (scene: animation queue, camera director, signs; benchmark; test board) count as activities.
+- **Continuous-effect inventory:**
+
+| Effect | Decision |
+|---|---|
+| Dice roll, token moves, building pops and sells, sign pops, camera follow, rotation, peek and nudge | Activity via the scene ticker: full rate, then the tail. |
+| Benchmark; test board in Detailed | `continuous`, unchanged. |
+| Idle bob, ambient effects, animated materials, the Gummy Bear's gloss | None exist (the gloss is a static material), so no 20 fps idle cap is needed. |
+| Menu CSS transitions | HTML only; they never wake the 3D render. |
+
+- **Dev toggle:** `?render=always`, or `__pn.scene.renderer.setAlwaysRender(bool)`. It is separate from `continuous`, so the benchmark and test board can't clear it. It is not in Settings.
+- **Overlay (Detailed):** `Render: ACTIVE/IDLE · N fps · M frames / 10 s`, read on the overlay's own 250 ms timer, so it never wakes the 3D loop.
+- **Observed:** after a close-up move, the camera spring keeps reporting motion for about 0.8 s of sub-pixel convergence (it settles at 1e-5). Left as is because loosening it would change the Stage 2 camera feel. It is a possible later saving.
+- **Checks** (`scripts/plans/idle.mjs`):
+  - At rest: IDLE, 0 frames.
+  - A roll from idle wakes within one frame.
+  - IDLE about 310 ms after the last animated frame.
+  - Same-seed bot games are identical with idle and always-render.
+  - `perf.mjs` idle check: 0 frames.
