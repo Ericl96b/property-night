@@ -62,7 +62,7 @@
           <button class="play" data-focus-key={`play-${id}`} onclick={() => play(id)} aria-label={`Play ${id}`}>▶</button>
           <span class="id">{id}</span>
           <span class="badge {st.cls}">{st.text}</span>
-          <span class="meta">{REGISTRY[id].bus} · gain {REGISTRY[id].gain} · {fileStem(id)}_01.ogg</span>
+          <span class="meta">{REGISTRY[id].bus} · synth gain {REGISTRY[id].synthGain} · file gain {REGISTRY[id].fileGain}{REGISTRY[id].shareFilesWith ? ` · shares ${REGISTRY[id].shareFilesWith}` : ''} · {fileStem(id)}_01.ogg</span>
         </div>
       {/each}
     {/each}

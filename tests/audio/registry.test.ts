@@ -10,7 +10,13 @@ describe('sound registry (audio Phase 0 §1)', () => {
     for (const id of SOUND_IDS) {
       const d = REGISTRY[id];
       expect(['ui', 'sfx', 'music'], id).toContain(d.bus);
-      expect(d.gain, id).toBeGreaterThan(0);
+      expect(d.synthGain, id).toBeGreaterThan(0);
+      expect(d.fileGain, id).toBeGreaterThan(0);
+      if (d.shareFilesWith !== undefined) {
+        expect(isSoundId(d.shareFilesWith), `${id} shares an unknown ID`).toBe(true);
+        expect(d.shareFilesWith, `${id} shares with itself`).not.toBe(id);
+        expect(REGISTRY[d.shareFilesWith as keyof typeof REGISTRY].shareFilesWith, `${id}: one hop only`).toBeUndefined();
+      }
       expect(d.cooldownMs, id).toBeGreaterThanOrEqual(0);
       expect(d.maxVoices, id).toBeGreaterThanOrEqual(1);
       expect(d.botGain, id).toBeGreaterThanOrEqual(0);
@@ -20,6 +26,10 @@ describe('sound registry (audio Phase 0 §1)', () => {
     expect(REGISTRY['ui.confirm'].bus).toBe('ui');
     expect(REGISTRY['music.main'].bus).toBe('music');
     expect(REGISTRY['dice.bounce.wood'].bus).toBe('sfx');
+    // Synth peak levels must not leak into file playback: files default to unity.
+    expect(REGISTRY['money.rent'].synthGain).toBe(0.09);
+    for (const id of SOUND_IDS) expect(REGISTRY[id].fileGain, id).toBe(1);
+    for (const id of SOUND_IDS.filter((i) => i.startsWith('money.') && i !== 'money.generic')) expect(REGISTRY[id].shareFilesWith, id).toBe('money.generic');
   });
 
   it('file names map to IDs and back', () => {

@@ -17,8 +17,18 @@ export interface SoundDef {
   /** Extra files on top of the ones the manifest finds (normally empty). */
   files: readonly string[];
   synth?: SynthName;
-  /** Per-sound level (linear). For synths this is the old loudest peak; the synth is normalized to 1. */
-  gain: number;
+  /** Synth fallback level (linear): the synth's original loudest peak (synths are normalized to 1). */
+  synthGain: number;
+  /**
+   * Recorded-file level (linear, default 1). Files are expected to be normalized, so 1 plays them
+   * as mastered; tune per ID once real files are in.
+   */
+  fileGain: number;
+  /**
+   * Borrow another ID's file pool while this ID has no files of its own (e.g. every money.* ID
+   * uses money.generic's files). One hop only: the target must not share in turn. Own files win.
+   */
+  shareFilesWith?: string;
   /** Random ± semitones per play. */
   pitchJitter: number;
   /** Random ± dB per play. */
@@ -56,7 +66,8 @@ function def(o: Opts): (id: string) => SoundDef {
     return {
       bus: cat === 'ui' ? 'ui' : cat === 'music' ? 'music' : 'sfx',
       files: [],
-      gain: 1,
+      synthGain: 1,
+      fileGain: 1,
       pitchJitter: 0,
       gainJitter: 0,
       cooldownMs: 0,
@@ -71,21 +82,22 @@ function def(o: Opts): (id: string) => SoundDef {
 const silent = (desc: string, extra: Partial<SoundDef> = {}) => def({ desc, ...extra });
 
 const BANNER_DUCK = { db: -6, ms: 900 };
-const moneyEntry = (desc: string) => def({ desc, synth: 'coins', gain: 0.09 });
+const moneyEntry = (desc: string, extra: Partial<SoundDef> = {}) =>
+  def({ desc, synth: 'coins', synthGain: 0.09, shareFilesWith: 'money.generic', ...extra });
 
 const ENTRIES = {
   // ---- dice ----------------------------------------------------------------------------------
-  'dice.bounce.wood': def({ desc: 'A die hits the board, a wall or a card stack', synth: 'dice', gain: 0.5, cooldownMs: 30 }),
-  'dice.bounce.die': def({ desc: 'A die hits the other die', synth: 'dice', gain: 0.5, cooldownMs: 30 }),
-  'dice.instant': def({ desc: 'Dice land at Instant speed (one knock)', synth: 'dice', gain: 0.5, cooldownMs: 30 }),
+  'dice.bounce.wood': def({ desc: 'A die hits the board, a wall or a card stack', synth: 'dice', synthGain: 0.5, cooldownMs: 30 }),
+  'dice.bounce.die': def({ desc: 'A die hits the other die', synth: 'dice', synthGain: 0.5, cooldownMs: 30 }),
+  'dice.instant': def({ desc: 'Dice land at Instant speed (one knock)', synth: 'dice', synthGain: 0.5, cooldownMs: 30 }),
   'dice.pickup': silent('Dice are picked up (a roll starts)'),
   'dice.throw': silent('Dice leave the hand'),
   'dice.settle': silent('Dice come to rest'),
   'dice.doubles': silent('Doubles rolled'),
   // ---- movement ------------------------------------------------------------------------------
-  'token.step': def({ desc: 'Token hops one tile (every hop except the landing tile)', synth: 'tap', gain: 0.12, cooldownMs: 45 }),
-  'token.land': def({ desc: 'Token lands on its destination tile', synth: 'tap', gain: 0.12, cooldownMs: 45 }),
-  'token.instant': def({ desc: 'Token arrives at Instant speed', synth: 'tap', gain: 0.12, cooldownMs: 45 }),
+  'token.step': def({ desc: 'Token hops one tile (every hop except the landing tile)', synth: 'tap', synthGain: 0.12, cooldownMs: 45 }),
+  'token.land': def({ desc: 'Token lands on its destination tile', synth: 'tap', synthGain: 0.12, cooldownMs: 45 }),
+  'token.instant': def({ desc: 'Token arrives at Instant speed', synth: 'tap', synthGain: 0.12, cooldownMs: 45 }),
   'token.glide': silent('Token glides directly to a tile (Go to Jail)'),
   'token.removed': silent('Token leaves the table (bankrupt, bots leave)'),
   // ---- money ---------------------------------------------------------------------------------
@@ -103,25 +115,25 @@ const ENTRIES = {
   'money.loanInstallment': moneyEntry('A loan installment is paid'),
   'money.loanPayoff': moneyEntry('A loan is paid off'),
   'money.seizureRefund': moneyEntry('The bank refunds a seizure surplus'),
-  'money.generic': moneyEntry('Any other payment (cards, repairs, trades, bankruptcy)'),
+  'money.generic': moneyEntry('Any other payment (cards, repairs, trades, bankruptcy)', { shareFilesWith: undefined }),
   // ---- property and buildings ----------------------------------------------------------------
-  'property.transfer': def({ desc: 'A property gets a new owner (SOLD sign pops)', synth: 'tock', gain: 0.35 }),
+  'property.transfer': def({ desc: 'A property gets a new owner (SOLD sign pops)', synth: 'tock', synthGain: 0.35 }),
   'property.toBank': silent('A property returns to the bank (sign sinks)'),
-  'building.house': def({ desc: 'A house is built', synth: 'tock', gain: 0.35 }),
-  'building.hotel': def({ desc: 'A hotel is built', synth: 'tock', gain: 0.35 }),
-  'building.sell': def({ desc: 'A house or hotel is sold', synth: 'tockLow', gain: 0.35 }),
+  'building.house': def({ desc: 'A house is built', synth: 'tock', synthGain: 0.35 }),
+  'building.hotel': def({ desc: 'A hotel is built', synth: 'tock', synthGain: 0.35 }),
+  'building.sell': def({ desc: 'A house or hotel is sold', synth: 'tockLow', synthGain: 0.35 }),
   // ---- cards ---------------------------------------------------------------------------------
-  'card.chance.draw': def({ desc: 'A Chance card is drawn', synth: 'card', gain: 0.35 }),
-  'card.chest.draw': def({ desc: 'A Community Chest card is drawn', synth: 'card', gain: 0.35 }),
+  'card.chance.draw': def({ desc: 'A Chance card is drawn', synth: 'card', synthGain: 0.35 }),
+  'card.chest.draw': def({ desc: 'A Community Chest card is drawn', synth: 'card', synthGain: 0.35 }),
   'card.reveal': silent('A drawn card is shown'),
   'card.dismiss': silent('A drawn card goes away'),
   // ---- banners -------------------------------------------------------------------------------
-  'banner.setComplete': def({ desc: 'Banner: a full colour set is owned', synth: 'stingGood', gain: 0.16, duck: BANNER_DUCK, maxVoices: 2 }),
-  'banner.auctionWon': def({ desc: 'Banner: an auction is won', synth: 'stingGood', gain: 0.16, duck: BANNER_DUCK, maxVoices: 2 }),
-  'banner.rentFree': def({ desc: 'Banner: a rent-free voucher is used', synth: 'stingGood', gain: 0.16, duck: BANNER_DUCK, maxVoices: 2 }),
-  'banner.seizure': def({ desc: 'Banner: the bank seizes loan collateral', synth: 'stingBad', gain: 0.22, duck: BANNER_DUCK, maxVoices: 2 }),
-  'banner.bankrupt': def({ desc: 'Banner: a player is bankrupt', synth: 'stingBad', gain: 0.22, duck: BANNER_DUCK, maxVoices: 2 }),
-  'banner.botsLeave': def({ desc: 'Banner: bank-backed bots lose backing or leave', synth: 'stingGood', gain: 0.16, duck: BANNER_DUCK, maxVoices: 2 }),
+  'banner.setComplete': def({ desc: 'Banner: a full colour set is owned', synth: 'stingGood', synthGain: 0.16, duck: BANNER_DUCK, maxVoices: 2 }),
+  'banner.auctionWon': def({ desc: 'Banner: an auction is won', synth: 'stingGood', synthGain: 0.16, duck: BANNER_DUCK, maxVoices: 2 }),
+  'banner.rentFree': def({ desc: 'Banner: a rent-free voucher is used', synth: 'stingGood', synthGain: 0.16, duck: BANNER_DUCK, maxVoices: 2 }),
+  'banner.seizure': def({ desc: 'Banner: the bank seizes loan collateral', synth: 'stingBad', synthGain: 0.22, duck: BANNER_DUCK, maxVoices: 2 }),
+  'banner.bankrupt': def({ desc: 'Banner: a player is bankrupt', synth: 'stingBad', synthGain: 0.22, duck: BANNER_DUCK, maxVoices: 2 }),
+  'banner.botsLeave': def({ desc: 'Banner: bank-backed bots lose backing or leave', synth: 'stingGood', synthGain: 0.16, duck: BANNER_DUCK, maxVoices: 2 }),
   // ---- turns and board events ----------------------------------------------------------------
   'turn.start': silent('A turn starts'),
   'turn.start.local': silent("A human player's turn starts"),
@@ -181,7 +193,7 @@ const ENTRIES = {
   'ui.lobby.join': silent('A controller claims a seat in the lobby'),
   'ui.lobby.start': silent('The game is started from the lobby'),
   // ---- music ---------------------------------------------------------------------------------
-  'music.main': def({ desc: 'Background music (generative loop)', synth: 'generativeMusic', gain: 1, maxVoices: 1, loop: true }),
+  'music.main': def({ desc: 'Background music (generative loop)', synth: 'generativeMusic', synthGain: 1, maxVoices: 1, loop: true }),
 } as const;
 
 export type SoundId = keyof typeof ENTRIES;
@@ -194,6 +206,16 @@ export const SOUND_IDS = Object.keys(REGISTRY) as SoundId[];
 
 export function isSoundId(id: string): id is SoundId {
   return Object.prototype.hasOwnProperty.call(REGISTRY, id);
+}
+
+/**
+ * Where an ID's recorded files come from: itself if `hasFiles(id)`, else its `shareFilesWith`
+ * target if that has files, else itself (nothing to play from files).
+ */
+export function filePoolOf(id: SoundId, hasFiles: (id: string) => boolean): string {
+  if (hasFiles(id)) return id;
+  const share = REGISTRY[id]?.shareFilesWith;
+  return share && hasFiles(share) ? share : id;
 }
 
 export function categoryOf(id: string): string {

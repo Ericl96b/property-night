@@ -180,6 +180,20 @@ describe('fallback order: file → synth → silent', () => {
     }
   });
 
+  it('shareFilesWith: money.* borrow money.generic files until they have their own', () => {
+    const loader = new AudioLoader(null);
+    const s = new Sound({}, { loader });
+    expect(s.status('money.rent')).toEqual({ kind: 'synth' });
+    loader.set('money.generic', [{ duration: 0.1 } as AudioBuffer, { duration: 0.1 } as AudioBuffer]);
+    expect(s.status('money.rent')).toEqual({ kind: 'file', count: 2 });
+    expect(s.filePool('money.rent')).toBe('money.generic');
+    loader.set('money.rent', [{ duration: 0.1 } as AudioBuffer]);
+    expect(s.status('money.rent')).toEqual({ kind: 'file', count: 1 });
+    expect(s.filePool('money.rent')).toBe('money.rent');
+    expect(s.filePool('money.tax')).toBe('money.generic');
+    expect(s.status('dice.bounce.wood')).toEqual({ kind: 'synth' }); // no share: unaffected
+  });
+
   it('play() outside a browser is a silent no-op', () => {
     const s = new Sound();
     expect(() => s.play('money.rent', { amount: 100 })).not.toThrow();

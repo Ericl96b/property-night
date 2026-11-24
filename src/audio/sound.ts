@@ -2,7 +2,7 @@
 // (`sound.play('dice.bounce.wood', { intensity })`), resolved as loaded files → synth fallback
 // → silence. The engine owns the audio context lifecycle (first-gesture unlock, hidden-tab
 // suspend), the ui / sfx / music buses, voice limits, batching and music ducking.
-import { REGISTRY, isSoundId, type Bus, type SoundId } from './registry';
+import { REGISTRY, filePoolOf, isSoundId, type Bus, type SoundId } from './registry';
 import { SYNTHS, coinCount } from './synths';
 import { GenerativeMusic } from './music';
 import { AudioLoader } from './loader';
@@ -159,7 +159,6 @@ export class Sound implements SoundApi {
         this.duckGain = ctx.createGain();
         this.duckGain.connect(this.buses.music);
         this.musicOut = ctx.createGain();
-        this.musicOut.gain.value = REGISTRY['music.main'].gain;
         this.musicOut.connect(this.duckGain);
         const len = ctx.sampleRate;
         this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -218,9 +217,11 @@ export class Sound implements SoundApi {
     const c = this.ctx;
     if (!c) return;
     const on = this.busGains().music > 0;
-    const files = this.loader.get('music.main');
+    const files = this.filesFor('music.main');
     if (restart || !on) this.stopMusic();
     if (!on || this.music?.playing || this.musicLoop) return;
+    const def = REGISTRY['music.main'];
+    this.musicOut.gain.value = files.length ? def.fileGain : def.synthGain;
     if (files.length) {
       const src = c.createBufferSource();
       src.buffer = files[0];
@@ -279,9 +280,18 @@ export class Sound implements SoundApi {
 
   // ---- playback --------------------------------------------------------------------------------
 
-  /** What an ID would play now: files, the synth fallback, or nothing. */
+  /** The ID whose loaded files this ID plays (itself, or its `shareFilesWith` pool). */
+  filePool(id: SoundId): string {
+    return filePoolOf(id, (k) => this.loader.get(k).length > 0);
+  }
+
+  private filesFor(id: SoundId): readonly AudioBuffer[] {
+    return this.loader.get(this.filePool(id));
+  }
+
+  /** What an ID would play now: files (its own or shared), the synth fallback, or nothing. */
   status(id: SoundId): SoundStatus {
-    const n = this.loader.get(id).length;
+    const n = this.filesFor(id).length;
     if (n) return { kind: 'file', count: n };
     const synth = REGISTRY[id]?.synth;
     return synth ? { kind: 'synth' } : { kind: 'silent' };
@@ -332,7 +342,7 @@ export class Sound implements SoundApi {
     const intensity = ctx.intensity === undefined ? 1 : Math.min(1, Math.max(0, ctx.intensity));
     const jitterDb = def.gainJitter ? (this.rand() * 2 - 1) * def.gainJitter : 0;
     const semis = def.pitchJitter ? (this.rand() * 2 - 1) * def.pitchJitter : 0;
-    let level = def.gain * 10 ** (jitterDb / 20) * (ctx.isBot ? def.botGain : 1);
+    let level = (st.kind === 'file' ? def.fileGain : def.synthGain) * 10 ** (jitterDb / 20) * (ctx.isBot ? def.botGain : 1);
     // Files have no notion of intensity: scale them (softly, so quiet hits stay audible).
     // Synths get the intensity as a parameter instead (dice uses it for its level).
     if (st.kind === 'file' && ctx.intensity !== undefined) level *= 0.35 + 0.65 * intensity;
@@ -344,9 +354,11 @@ export class Sound implements SoundApi {
     let dur: number;
     let src: AudioBufferSourceNode | null = null;
     if (st.kind === 'file') {
-      const bufs = this.loader.get(id);
-      const k = pickVariation(bufs.length, this.lastVariation.get(id) ?? -1, () => this.rand());
-      this.lastVariation.set(id, k);
+      // Variation memory is per pool, so IDs sharing files don't repeat each other back to back.
+      const pool = this.filePool(id);
+      const bufs = this.loader.get(pool);
+      const k = pickVariation(bufs.length, this.lastVariation.get(pool) ?? -1, () => this.rand());
+      this.lastVariation.set(pool, k);
       src = c.createBufferSource();
       src.buffer = bufs[k];
       src.playbackRate.value = 2 ** (semis / 12);
