@@ -22,12 +22,13 @@ import {
   type PresetId,
   type TokenCount,
 } from './scenes';
+import type { SoundApi } from '../audio/sound';
 import { tileCenter, turnsPhase, wavePhase, type PhaseCtx, type PhaseScript } from './phases';
 
 export interface TestBoardEnv {
   scene: GameScene;
   director: Director;
-  sound: { tock(sell?: boolean): void };
+  sound: Pick<SoundApi, 'play'>;
   /** Re-generate the board face when the printed board changes (as on game start). */
   ensureBoard(board: BoardData): Promise<void>;
   /** The UI re-reads the test board's fields. */
@@ -179,7 +180,7 @@ export class TestBoard {
     q.push({
       label: 'build',
       start: () => {
-        this.env.sound.tock();
+        this.env.sound.play('building.house');
         return this.scene.buildings.add(tile, q.factor === Infinity ? 0 : 1 / q.factor);
       },
     });
@@ -195,7 +196,7 @@ export class TestBoard {
     q.push({
       label: 'sell',
       start: () => {
-        this.env.sound.tock(true);
+        this.env.sound.play('building.sell');
         return this.scene.buildings.remove(tile, q.factor === Infinity ? 0 : 1 / q.factor);
       },
     });

@@ -22,6 +22,8 @@ export interface PlacedToken {
  * (0 at the start, path.length on arrival); the close-up chase camera uses it.
  */
 export type FollowFn = (token: THREE.Vector3 | null, destination?: THREE.Vector3, hops?: number) => void;
+/** Called on each hop: its index on the path, and whether it is the landing tile. */
+export type StepFn = (index: number, last: boolean) => void;
 
 export class TokenLayer {
   readonly group = new THREE.Group();
@@ -101,7 +103,7 @@ export class TokenLayer {
   }
 
   /** Hop `steps` tiles forward (legacy helper used by review tools). */
-  hop(id: TokenId, steps: number, speed: () => number, follow?: FollowFn, onStep?: () => void): Animation {
+  hop(id: TokenId, steps: number, speed: () => number, follow?: FollowFn, onStep?: StepFn): Animation {
     const from = this.tokens.get(id)!.tile;
     const path = Array.from({ length: steps }, (_, k) => (from + k + 1) % 40);
     return this.travel(id, path, speed, follow, onStep);
@@ -111,7 +113,7 @@ export class TokenLayer {
    * Hop along `path` (tile indices visited in order; the last is the destination). Works
    * forwards and backwards. Returns an Animation for the queue.
    */
-  travel(id: TokenId, path: number[], speed: () => number, follow?: FollowFn, onStep?: () => void): Animation {
+  travel(id: TokenId, path: number[], speed: () => number, follow?: FollowFn, onStep?: StepFn): Animation {
     const placed = this.tokens.get(id)!;
     const g = placed.token.group;
     const to = path.length ? path[path.length - 1] : placed.tile;
@@ -158,7 +160,7 @@ export class TokenLayer {
           while (t >= 1 && seg < pts.length - 1) {
             t -= 1;
             seg++;
-            onStep?.();
+            onStep?.(seg - 1, seg === pts.length - 1);
             if (seg === pts.length - 1) break;
           }
           if (seg >= pts.length - 1) {

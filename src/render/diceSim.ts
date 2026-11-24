@@ -76,9 +76,23 @@ export interface DiceThrow {
   attempts: number;
   /** True when every attempt rested cocked and the result was placed flat. */
   placedFlat: boolean;
-  /** Step indices of notable impacts (for clatter sounds). */
-  contacts: number[];
+  /** Notable impacts (for clatter sounds), in step order. */
+  contacts: DiceContact[];
 }
+
+/** One recorded impact (audio Phase 0 §4): what was hit, and how hard. */
+export interface DiceContact {
+  step: number;
+  /** 'die': the two dice hit each other; 'wood': a die hit the board, a wall or a card stack. */
+  kind: 'wood' | 'die';
+  /** 0–1 from the relative speed at contact. */
+  intensity: number;
+}
+
+/** Relative contact speed (board units/s) that counts as a full-strength hit. */
+export const FULL_IMPACT_SPEED = 1.6;
+/** Contacts of one kind closer than this many steps (~33 ms) merge into one. */
+const MERGE_STEPS = 4;
 
 export interface ThrowOptions {
   /** Yaw of the thrower's side (camera rig yaw); the throw starts from that side. */
@@ -158,10 +172,25 @@ function simulateOnce(rng: Rng, opts: ThrowOptions) {
     world.addBody(body);
     bodies.push(body);
   }
-  const contacts: number[] = [];
+  const contacts: DiceContact[] = [];
   let step = 0;
-  world.addEventListener('beginContact', () => {
-    if (!contacts.length || step - contacts[contacts.length - 1] > 4) contacts.push(step);
+  // Velocities before the current step: the impact speed is read from these (the solver has
+  // already bounced the bodies by the time the contact event fires).
+  const prevVel = new Map<CANNON.Body, CANNON.Vec3>(bodies.map((b) => [b, b.velocity.clone()]));
+  const zero = new CANNON.Vec3();
+  world.addEventListener('beginContact', (ev: { bodyA: CANNON.Body; bodyB: CANNON.Body }) => {
+    const a = prevVel.get(ev.bodyA) ?? zero;
+    const b = prevVel.get(ev.bodyB) ?? zero;
+    const speed = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    const intensity = Math.min(1, speed / FULL_IMPACT_SPEED);
+    const kind = bodies.includes(ev.bodyA) && bodies.includes(ev.bodyB) ? 'die' : 'wood';
+    let last: DiceContact | undefined;
+    for (let i = contacts.length - 1; i >= 0; i--) if (contacts[i].kind === kind) {
+      last = contacts[i];
+      break;
+    }
+    if (last && step - last.step <= MERGE_STEPS) last.intensity = Math.max(last.intensity, intensity);
+    else contacts.push({ step, kind, intensity });
   });
   const frames: [number[], number[]] = [[], []];
   const record = () => {
@@ -171,6 +200,7 @@ function simulateOnce(rng: Rng, opts: ThrowOptions) {
   };
   record();
   for (step = 1; step <= MAX_STEPS; step++) {
+    for (const b of bodies) prevVel.get(b)!.copy(b.velocity);
     world.step(STEP);
     record();
     if (bodies.every((b) => b.sleepState === CANNON.Body.SLEEPING)) break;

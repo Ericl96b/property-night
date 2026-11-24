@@ -19,6 +19,8 @@ export interface Settings {
   volumeMaster: number;
   volumeMusic: number;
   volumeEffects: number;
+  /** Interface sounds (menus, focus, buttons): audio Phase 0 §5. */
+  volumeUi: number;
   /** Graphics, independent of the Quality preset. */
   ambientOcclusion: boolean;
   /** Exposure multiplier, 0.7–1.3. */
@@ -56,6 +58,7 @@ export const DEFAULT_SETTINGS: Settings = {
   volumeMaster: 0.8,
   volumeMusic: 0.4,
   volumeEffects: 0.8,
+  volumeUi: 0.7,
   ambientOcclusion: false,
   brightness: 1,
   toneMapping: 'aces',

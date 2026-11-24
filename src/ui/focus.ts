@@ -5,6 +5,8 @@
 // One focus: the DOM focus. The mouse moves it too (App hovers call `hoverFocus`), so the
 // controller and the mouse can never highlight two different items.
 
+import { audio } from '../audio';
+
 export type Dir = 'up' | 'down' | 'left' | 'right';
 
 const FOCUSABLE =
@@ -68,7 +70,10 @@ export function moveFocus(container: Element, dir: Dir): HTMLElement | null {
   const cur = active && container.contains(active) ? rects.find((r) => r.el === active) ?? null : null;
   // Nothing focused yet: the first press lands on the layer's default item.
   const next = cur ? pickNext(rects, cur, dir) : defaultFocus(container);
-  if (next) focusEl(next);
+  if (next) {
+    if (next !== active) audio.play('ui.focus.move');
+    focusEl(next);
+  }
   return next ?? null;
 }
 
@@ -101,6 +106,12 @@ export function isStepper(el: Element | null): el is HTMLElement {
  * of its range, so left/right then moves focus on (a settings column is never a dead end).
  */
 export function stepControl(el: HTMLElement, dir: 1 | -1): boolean {
+  const moved = stepValue(el, dir);
+  if (moved) audio.play('ui.step');
+  return moved;
+}
+
+function stepValue(el: HTMLElement, dir: 1 | -1): boolean {
   if (el instanceof HTMLSelectElement) {
     let i = el.selectedIndex + dir;
     while (i >= 0 && i < el.options.length && el.options[i].disabled) i += dir;
@@ -147,6 +158,7 @@ export function activate(el: HTMLElement): boolean {
       if (first >= 0 && first !== el.selectedIndex) {
         el.selectedIndex = first;
         fire(el);
+        audio.play('ui.step');
       }
     }
     return true;
@@ -166,5 +178,6 @@ export function hoverFocus(target: EventTarget | null, scope: Element | null): v
   const a = document.activeElement;
   if (a instanceof HTMLInputElement && (a.type === 'text' || a.type === 'search') && scope.contains(a)) return;
   if (a instanceof HTMLTextAreaElement) return;
+  audio.play('ui.focus.hover');
   focusEl(el, false);
 }

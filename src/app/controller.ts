@@ -13,6 +13,7 @@ import {
   type State,
 } from '../engine';
 import { chooseAction } from '../bots';
+import { audio } from '../audio';
 import type { CardView, DirectorLike, Moment } from '../director/director';
 import type { Speed } from '../director/queue';
 
@@ -185,6 +186,8 @@ export class GameController {
       events = r.events;
     } catch (e) {
       if (e instanceof EngineError) {
+        // A person's action was refused (bots retry silently).
+        if (this.state.seats[action.seat]?.kind === 'human') audio.play('ui.error', { seat: action.seat });
         this.error = e.message;
         this.emit();
         return e.message;
@@ -223,6 +226,7 @@ export class GameController {
     if (!u || !this.undoEnabled) return false;
     this.director?.skip();
     this.load(u.state, this.actions.slice(0, u.actions));
+    audio.play('game.undo', { seat: u.seat });
     this.onChange();
     return true;
   }

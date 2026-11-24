@@ -13,6 +13,7 @@
     onimport,
     onsettings,
     ontestboard,
+    onsoundtest,
   }: {
     saves: Saves;
     oncontinue: () => void;
@@ -21,6 +22,8 @@
     onimport: (text: string) => string | null;
     onsettings: () => void;
     ontestboard: () => void;
+    /** Dev builds only (audio Phase 0 §9). */
+    onsoundtest?: () => void;
   } = $props();
 
   let canContinue = $state(false);
@@ -52,6 +55,7 @@
       <ActionButton label="New game" glyph={canContinue ? undefined : 'confirm'} primary={!canContinue} onclick={onnew} />
       <ActionButton label="Load game" disabled={!list.length} onclick={() => (loading = true)} />
       <ActionButton label="Test board" onclick={ontestboard} />
+      {#if import.meta.env.DEV && onsoundtest}<ActionButton label="Sound test" onclick={onsoundtest} />{/if}
       <ActionButton label="Import save…" onclick={() => fileInput.click()} />
       <ActionButton label="Settings" onclick={onsettings} />
       <input bind:this={fileInput} type="file" accept="application/json,.json" hidden onchange={importFile} />

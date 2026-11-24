@@ -8,6 +8,8 @@
   import { getContext } from 'svelte';
   import { glyphFor, type GlyphFamily } from '../present';
   import { RESOLUTIONS, aboveDisplay, displayPhysical, type RenderHeight } from '../../render/resolution';
+  import { audio } from '../../audio';
+  import type { Bus } from '../../audio/registry';
 
   let {
     gs,
@@ -32,11 +34,17 @@
     onbenchmark?: () => void;
   } = $props();
 
-  const VOLUMES: { key: 'volumeMaster' | 'volumeMusic' | 'volumeEffects'; label: string }[] = [
-    { key: 'volumeMaster', label: 'Volume' },
-    { key: 'volumeMusic', label: 'Music' },
-    { key: 'volumeEffects', label: 'Sound effects' },
+  // `bus`: where the volume preview plays (audio Phase 0 §5); the master level previews on effects.
+  const VOLUMES: { key: 'volumeMaster' | 'volumeMusic' | 'volumeEffects' | 'volumeUi'; label: string; bus: Bus }[] = [
+    { key: 'volumeMaster', label: 'Volume', bus: 'sfx' },
+    { key: 'volumeMusic', label: 'Music', bus: 'music' },
+    { key: 'volumeEffects', label: 'Sound effects', bus: 'sfx' },
+    { key: 'volumeUi', label: 'Interface sounds', bus: 'ui' },
   ];
+  const setVolume = (v: (typeof VOLUMES)[number], value: string) => {
+    onsetting({ [v.key]: Number(value) / 100 });
+    audio.play('ui.volumePreview', { bus: v.bus });
+  };
   const STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
   const BRIGHTNESS = [70, 80, 90, 100, 110, 120, 130];
 
@@ -128,7 +136,7 @@
         </label>
         {#each VOLUMES as v (v.key)}
           <label>{v.label}
-            <select value={String(Math.round(settings[v.key] * 10) * 10)} onchange={(e) => onsetting({ [v.key]: Number((e.currentTarget as HTMLSelectElement).value) / 100 })}>
+            <select value={String(Math.round(settings[v.key] * 10) * 10)} onchange={(e) => setVolume(v, (e.currentTarget as HTMLSelectElement).value)}>
               {#each STEPS as p}<option value={String(p)}>{p === 0 ? 'Off' : `${p}%`}</option>{/each}
             </select>
           </label>

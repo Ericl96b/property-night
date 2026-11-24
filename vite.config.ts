@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { buildManifest, scanAudio } from './scripts/audio-manifest.ts';
 
 /**
  * Dev-only: POST a data URL to /__snap?name=foo and it is saved as .snapshots/foo.jpg.
@@ -29,9 +30,46 @@ function snapshots(): Plugin {
   };
 }
 
+/**
+ * Audio Phase 0: the list of sound files in public/audio/ (a browser can't list a folder), as
+ * `virtual:audio-manifest`. Builds add a content hash to each URL (the service worker is cache
+ * first). Dev serves a fresh scan at /__audio-manifest for the Sound Test "Reload" button.
+ */
+function audioManifest(): Plugin {
+  const ID = 'virtual:audio-manifest';
+  const RESOLVED = '\0' + ID;
+  let isBuild = false;
+  const publicDir = resolve('public');
+  return {
+    name: 'pn-audio-manifest',
+    configResolved(c) {
+      isBuild = c.command === 'build';
+    },
+    resolveId: (id) => (id === ID ? RESOLVED : undefined),
+    load(id) {
+      if (id !== RESOLVED) return;
+      return `export default ${JSON.stringify(buildManifest(scanAudio(publicDir), isBuild))};`;
+    },
+    configureServer(server) {
+      server.middlewares.use('/__audio-manifest', (_req, res) => {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(JSON.stringify(buildManifest(scanAudio(publicDir), false)));
+      });
+      const onFs = (file: string) => {
+        if (!file.replace(/\\/g, '/').includes('/public/audio/')) return;
+        const mod = server.moduleGraph.getModuleById(RESOLVED);
+        if (mod) server.moduleGraph.invalidateModule(mod);
+      };
+      server.watcher.on('add', onFs);
+      server.watcher.on('unlink', onFs);
+    },
+  };
+}
+
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? '/property-night/' : '/',
-  plugins: [svelte(), snapshots()],
+  plugins: [svelte(), snapshots(), audioManifest()],
   server: { port: 5173 },
   preview: { port: 4173 },
   build: { target: 'es2022', chunkSizeWarningLimit: 1500 },

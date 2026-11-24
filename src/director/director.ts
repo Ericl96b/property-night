@@ -24,7 +24,29 @@ export function promiseBadgesOn(s: State, tile: number): { rentFree: boolean; no
 }
 import { DEFAULT_SETTINGS, isBigPayment, type Settings } from '../app/settings';
 import type { Animation } from './queue';
-import { SILENT, type SoundFx } from '../audio/sound';
+import { SILENT, type PlayCtx, type SoundApi } from '../audio/sound';
+import type { SoundId } from '../audio/registry';
+import type { BoardData } from '../data/classicBoard';
+
+/** Which money sound a payment plays (audio Phase 0 §4), from its reason. */
+export function paymentSoundId(e: { reason: string; tile?: number }, board: Pick<BoardData, 'tiles'>): SoundId {
+  const r = e.reason;
+  if (r.startsWith('rent on ')) return 'money.rent';
+  if (r === 'GO salary') return 'money.salary';
+  if (r === 'Free Parking') return 'money.freeParking';
+  if (r === 'purchase' || r.endsWith(' auction')) return 'money.purchase';
+  if (r === 'building') return 'money.build';
+  if (r === 'building sold') return 'money.sellBuilding';
+  if (r === 'mortgage') return 'money.mortgage';
+  if (r === 'unmortgage' || r.startsWith('interest on ')) return 'money.unmortgage';
+  if (r === 'jail fine') return 'money.jailFine';
+  if (r === 'bank loan') return 'money.loanTaken';
+  if (r === 'loan installment') return 'money.loanInstallment';
+  if (r === 'loan payoff') return 'money.loanPayoff';
+  if (r === 'seizure refund') return 'money.seizureRefund';
+  if (e.tile !== undefined && board.tiles[e.tile]?.type === 'tax') return 'money.tax';
+  return 'money.generic';
+}
 
 export interface CardView {
   deck: 'chance' | 'chest';
@@ -88,8 +110,10 @@ export class Director implements DirectorLike {
 
   /** Live settings (payment thresholds). */
   settings: () => Settings = () => DEFAULT_SETTINGS;
-  /** Sound effects (SPEC §9); silent in tests and until audio is unlocked. */
-  sound: SoundFx = SILENT;
+  /** Sound (SPEC §9, audio Phase 0): plays registry IDs; silent in tests. */
+  sound: SoundApi = SILENT;
+  /** The auction's current leader (auction.leaderChange). */
+  private auctionLeader: number | null = null;
 
   constructor(
     private scene: GameScene,
@@ -98,6 +122,8 @@ export class Director implements DirectorLike {
   ) {
     this.cosmetic = new Rng(seed ^ 0x5bd1e995);
     this.scene.queue.onIdle = () => this.hooks.idle();
+    // Skips and multi-item frames play as one sound batch (audio Phase 0 §6).
+    this.scene.queue.batch = { begin: () => this.sound.beginBatch(), end: () => this.sound.endBatch() };
   }
 
   get busy(): boolean {
@@ -188,7 +214,7 @@ export class Director implements DirectorLike {
     return { label, start: () => void f(), finish: () => {} };
   }
 
-  private momentAnim(m: Moment, tile?: number): Animation {
+  private momentAnim(m: Moment, tile?: number, sound?: () => void): Animation {
     const sc = this.scene;
     const end = () => {
       this.hooks.moment(null);
@@ -197,7 +223,7 @@ export class Director implements DirectorLike {
     return {
       label: `moment ${m.kind}`,
       start: () => {
-        if (m.kind === 'banner') this.sound.sting(m.tone === 'oxblood' ? 'bad' : 'good');
+        sound?.();
         this.hooks.moment(m);
         if (tile !== undefined && !this.hooks.screenOpen?.()) {
           const [x, z] = tileLocalToWorld(tileFrame(tile), 0, 0);
@@ -222,9 +248,19 @@ export class Director implements DirectorLike {
     const speed = () => (this.speed === Infinity ? 1000 : this.speed);
     const name = (i: number) => state.seats[i].name;
     const setBanners = new Set<string>();
-    for (const e of events) {
+    const isBot = (seat: number | undefined) => seat !== undefined && state.seats[seat]?.kind !== 'human';
+    /** Play a sound for an action by `seat` (fills seat and isBot). */
+    const fx = (id: SoundId, seat?: number, extra: PlayCtx = {}) => this.sound.play(id, { seat, isBot: isBot(seat), ...extra });
+    /** A sound in step with the animations queued so far. */
+    const cue = (id: SoundId, seat?: number, extra?: PlayCtx) => q.push(this.instant(id, () => fx(id, seat, extra)));
+    const banner = (id: SoundId, seat: number | null) => () => fx(id, seat ?? undefined);
+    for (let ei = 0; ei < events.length; ei++) {
+      const e = events[ei];
+      const later = events.slice(ei + 1);
       switch (e.type) {
         case 'turnStarted': {
+          cue('turn.start', e.seat);
+          if (state.seats[e.seat]?.kind === 'human') cue('turn.start.local', e.seat);
           // Owner request (2026-11-18): the camera turns to the side the active token is on.
           const at = this.positions[e.seat] ?? state.players[e.seat].position;
           if (sc.camera.closeup) {
@@ -236,23 +272,48 @@ export class Director implements DirectorLike {
           break;
         }
         case 'diceRolled': {
+          cue('dice.pickup', e.seat);
           if (sc.camera.closeup) {
             // Stage 2 Dice shot: pull back to the medium shot; throw at about 80% of the way.
             const at = this.positions[e.seat] ?? state.players[e.seat].position;
             q.push(this.cameraShot('dice-shot', () => sc.camera.dicePose(sc.camera.side, at), { smooth: CLOSEUP.shotSmooth, block: true, gate: CLOSEUP.diceGate }));
           }
           let th: ReturnType<typeof simulateThrow> | undefined;
+          let settled = false;
+          const settle = () => {
+            if (settled) return;
+            settled = true;
+            fx('dice.settle', e.seat);
+          };
           q.push({
             label: 'dice',
             start: () => {
               // Thrown from the side the camera faces (the active player's view).
               const opts = { sideYaw: SIDE_YAW[sc.camera.side], floorY: BOARD_TOP };
               th = this.speed === Infinity ? placeFlat(e.dice, this.cosmetic, opts) : simulateThrow(e.dice, this.cosmetic, opts);
-              if (this.speed === Infinity) this.sound.dice();
-              return sc.dice.play(th, this.speed === Infinity ? 1000 : this.speed, () => this.sound.dice());
+              fx('dice.throw', e.seat);
+              if (this.speed === Infinity) fx('dice.instant', e.seat);
+              settled = false;
+              return sc.dice.play(
+                th,
+                this.speed === Infinity ? 1000 : this.speed,
+                (c) => fx(c.kind === 'die' ? 'dice.bounce.die' : 'dice.bounce.wood', e.seat, { intensity: c.intensity }),
+                settle,
+              );
             },
-            finish: () => th && sc.dice.pose(th, Infinity),
+            finish: () => {
+              if (th) sc.dice.pose(th, Infinity);
+              settle();
+            },
           });
+          if (e.doubles) cue('dice.doubles', e.seat);
+          else {
+            // A roll for doubles in jail failed: still jailed afterwards (not newly jailed), or
+            // released only because the last attempt ran out.
+            const stillJailed = state.players[e.seat]?.jail && !later.some((x) => x.type === 'jailed' && x.seat === e.seat);
+            const outOfTries = later.some((x) => x.type === 'released' && x.seat === e.seat && x.how === 'maxTurns');
+            if (stillJailed || outOfTries) cue('jail.doublesFail', e.seat);
+          }
           break;
         }
         case 'moved': {
@@ -262,15 +323,17 @@ export class Director implements DirectorLike {
           if (e.steps === 0) {
             // Direct move (to jail): glide. Close-up pulls back to the Table rest view for it.
             if (closeup) q.push(this.cameraShot('pull-back', () => sc.camera.restPose(SIDE_YAW[sc.camera.side], 1), { smooth: CLOSEUP.shotSmooth, block: true, gate: 0.9 }));
+            cue('token.glide', e.seat);
             q.push(sc.tokens.glide(id, target, speed, closeup ? undefined : this.follow));
           } else {
             const n = Math.abs(e.steps);
             const dir = Math.sign(e.steps) as 1 | -1;
             const path = Array.from({ length: n }, (_, k) => (((e.from + dir * (k + 1)) % 40) + 40) % 40);
-            // Instant speed: one tap on arrival instead of a tap per tile.
-            const tap = this.speed === Infinity ? undefined : () => this.sound.tap();
-            if (!tap) q.push(this.instant('tap', () => this.sound.tap()));
-            q.push(sc.tokens.travel(id, path, speed, closeup ? this.chaseFollow(e.from, dir) : this.follow, tap));
+            // Instant speed: one tap on arrival (after the move) instead of a tap per tile.
+            const instant = this.speed === Infinity;
+            const step = instant ? undefined : (_k: number, last: boolean) => fx(last ? 'token.land' : 'token.step', e.seat);
+            q.push(sc.tokens.travel(id, path, speed, closeup ? this.chaseFollow(e.from, dir) : this.follow, step));
+            if (instant) cue('token.instant', e.seat);
           }
           this.positions[e.seat] = e.to;
           if (closeup) {
@@ -292,7 +355,8 @@ export class Director implements DirectorLike {
               sc.decals.setOwner(e.tile, color);
               // SOLD sign pops up (re-colors on a new owner, sinks when the bank takes it back).
               sc.signs.setOwner(e.tile, color, true);
-              if (color && this.speed !== Infinity) this.sound.tock();
+              // At all speeds (fix §8.2): batching keeps Instant from stacking them.
+              fx(color ? 'property.transfer' : 'property.toBank', e.to ?? undefined);
               sc.renderer.requestRender();
             }),
           );
@@ -300,7 +364,7 @@ export class Director implements DirectorLike {
           if (e.to !== null && g && !setBanners.has(g) && groupTiles(state.board, g).every((i) => state.tiles[i].owner === e.to)) {
             setBanners.add(g);
             const sub = groupTiles(state.board, g).map((i) => state.board.tiles[i].name).join(' · ');
-            q.push(this.momentAnim({ kind: 'banner', title: `${name(e.to)} owns the full set`, subtitle: sub, seat: e.to, tone: 'forest', duration: BANNER_TIME }));
+            q.push(this.momentAnim({ kind: 'banner', title: `${name(e.to)} owns the full set`, subtitle: sub, seat: e.to, tone: 'forest', duration: BANNER_TIME }, undefined, banner('banner.setComplete', e.to)));
           }
           break;
         }
@@ -309,11 +373,11 @@ export class Director implements DirectorLike {
           q.push(this.instant('mortgage', () => sc.decals.setMortgaged(e.tile, e.type === 'mortgaged')));
           break;
         case 'built': {
-          q.push({ label: 'build', start: () => (this.sound.tock(), sc.buildings.add(e.tile, this.speed === Infinity ? 0 : 1 / this.speed)) });
+          q.push({ label: 'build', start: () => (fx(e.buildings === 5 ? 'building.hotel' : 'building.house', e.seat), sc.buildings.add(e.tile, this.speed === Infinity ? 0 : 1 / this.speed)) });
           break;
         }
         case 'sold': {
-          q.push({ label: 'sell', start: () => (this.sound.tock(true), sc.buildings.remove(e.tile, this.speed === Infinity ? 0 : 1 / this.speed)) });
+          q.push({ label: 'sell', start: () => (fx('building.sell', e.seat), sc.buildings.remove(e.tile, this.speed === Infinity ? 0 : 1 / this.speed)) });
           break;
         }
         case 'cardDrawn': {
@@ -321,8 +385,9 @@ export class Director implements DirectorLike {
           q.push({
             label: 'card',
             start: () => {
-              this.sound.card();
+              fx(e.deck === 'chance' ? 'card.chance.draw' : 'card.chest.draw', e.seat);
               this.hooks.card(card);
+              fx('card.reveal', e.seat);
               let t = 0;
               return (dt) => {
                 t += dt * speed();
@@ -331,21 +396,31 @@ export class Director implements DirectorLike {
             },
             finish: () => this.hooks.card(null),
           });
-          q.push(this.instant('card-off', () => this.hooks.card(null)));
+          q.push(
+            this.instant('card-off', () => {
+              this.hooks.card(null);
+              fx('card.dismiss', e.seat);
+            }),
+          );
           break;
         }
         case 'bankrupt': {
           const id = this.tokenOf(state, e.seat);
-          q.push(this.instant('bankrupt', () => sc.tokens.remove(id)));
+          q.push(
+            this.instant('bankrupt', () => {
+              sc.tokens.remove(id);
+              fx('token.removed', e.seat);
+            }),
+          );
           const sub = e.creditor === 'bank' ? 'Everything returns to the bank' : `Everything goes to ${name(e.creditor)}`;
-          q.push(this.momentAnim({ kind: 'banner', title: `${name(e.seat)} is bankrupt`, subtitle: sub, seat: e.seat, tone: 'oxblood', duration: BANNER_TIME }));
+          q.push(this.momentAnim({ kind: 'banner', title: `${name(e.seat)} is bankrupt`, subtitle: sub, seat: e.seat, tone: 'oxblood', duration: BANNER_TIME }, undefined, banner('banner.bankrupt', e.seat)));
           break;
         }
         case 'rentWaived': {
           // Stage 3 §5.1: the rent moment becomes a short rent-free banner.
           const sub = `${name(e.seat)} skips $${e.rent.toLocaleString('en-US')} on ${state.board.tiles[e.tile].name}`;
           const title = `Rent-free (${name(e.owner)}'s voucher) · ${e.promise.left} left`;
-          q.push(this.momentAnim({ kind: 'banner', title, subtitle: sub, seat: e.seat, tone: 'forest', duration: BANNER_TIME }, e.tile));
+          q.push(this.momentAnim({ kind: 'banner', title, subtitle: sub, seat: e.seat, tone: 'forest', duration: BANNER_TIME }, e.tile, banner('banner.rentFree', e.seat)));
           break;
         }
         case 'bankBackingEnded': {
@@ -353,17 +428,23 @@ export class Director implements DirectorLike {
           if (e.mode === 'remove') {
             for (const i of e.seats) {
               const id = this.tokenOf(state, i);
-              q.push(this.instant('leave', () => sc.tokens.remove(id)));
+              q.push(
+                this.instant('leave', () => {
+                  sc.tokens.remove(id);
+                  fx('token.removed', i);
+                }),
+              );
             }
           }
           const title = e.mode === 'remove' ? `${bots} ${e.seats.length > 1 ? 'leave' : 'leaves'} the table` : `The bank stops backing ${bots}`;
           const sub = `${name(e.by)} built the first hotel${e.mode === 'cutoff' ? ` · now playing on $${e.cash.toLocaleString('en-US')}` : ''}`;
-          q.push(this.momentAnim({ kind: 'banner', title, subtitle: sub, seat: e.seats[0], tone: 'brass', duration: BANNER_TIME }));
+          q.push(this.momentAnim({ kind: 'banner', title, subtitle: sub, seat: e.seats[0], tone: 'brass', duration: BANNER_TIME }, undefined, banner('banner.botsLeave', e.seats[0])));
           break;
         }
         case 'payment': {
           if (e.amount <= 0) break;
-          q.push(this.instant('coins', () => this.sound.coins(e.amount)));
+          const actor = typeof e.from === 'number' ? e.from : typeof e.to === 'number' ? e.to : undefined;
+          cue(paymentSoundId(e, state.board), actor, { amount: e.amount, payer: e.from, payee: e.to });
           const bankBotPays = typeof e.from === 'number' && state.seats[e.from].kind === 'bankBot';
           const before = [...e.cash];
           if (typeof e.from === 'number' && !bankBotPays) before[e.from] += e.amount;
@@ -382,16 +463,71 @@ export class Director implements DirectorLike {
           break;
         }
         case 'loanSeized': {
-          q.push(this.momentAnim({ kind: 'banner', title: `${name(e.seat)} missed a loan payment`, subtitle: `The bank seized ${e.tiles.map((t) => state.board.tiles[t].name).join(', ')}`, seat: e.seat, tone: 'oxblood', duration: BANNER_TIME }));
+          q.push(this.momentAnim({ kind: 'banner', title: `${name(e.seat)} missed a loan payment`, subtitle: `The bank seized ${e.tiles.map((t) => state.board.tiles[t].name).join(', ')}`, seat: e.seat, tone: 'oxblood', duration: BANNER_TIME }, undefined, banner('banner.seizure', e.seat)));
           break;
         }
         case 'auctionEnded': {
-          if (e.winner === null) break;
+          this.auctionLeader = null;
+          if (e.winner === null) {
+            cue('auction.noWinner');
+            break;
+          }
           const what = e.kind === 'house' || e.kind === 'hotel' ? `A ${e.kind}` : state.board.tiles[e.tile].name;
           const sub = `${what} for $${e.amount.toLocaleString('en-US')}`;
-          q.push(this.momentAnim({ kind: 'banner', title: `${name(e.winner)} wins the auction`, subtitle: sub, seat: e.winner, tone: 'brass', duration: BANNER_TIME }));
+          q.push(this.momentAnim({ kind: 'banner', title: `${name(e.winner)} wins the auction`, subtitle: sub, seat: e.winner, tone: 'brass', duration: BANNER_TIME }, undefined, banner('banner.auctionWon', e.winner)));
           break;
         }
+        // Silent hooks (audio Phase 0 §4): IDs with no sound yet, so files can be dropped in.
+        case 'turnEnded':
+          cue('turn.end', e.seat);
+          break;
+        case 'passedGo':
+          cue('go.pass', e.seat);
+          break;
+        case 'debtPending':
+          cue('debt.pending', e.debt.from);
+          break;
+        case 'jailed':
+          cue('jail.enter', e.seat);
+          break;
+        case 'released':
+          cue(e.how === 'card' ? 'jail.release.card' : 'jail.release', e.seat);
+          break;
+        case 'auctionStarted':
+          this.auctionLeader = null;
+          cue('auction.start');
+          break;
+        case 'bid': {
+          const change = this.auctionLeader !== null && this.auctionLeader !== e.seat;
+          this.auctionLeader = e.seat;
+          cue(change ? 'auction.leaderChange' : 'auction.bid', e.seat);
+          break;
+        }
+        case 'passed':
+          cue('auction.pass', e.seat);
+          break;
+        case 'tradeProposed': {
+          const o = e.offer;
+          if (state.seats[o.from]?.kind !== 'human' && state.seats[o.to]?.kind === 'human') cue('trade.incomingFromBot', o.from);
+          else cue('trade.propose', o.from);
+          break;
+        }
+        case 'tradeAccepted':
+          cue('trade.accept', e.offer.to);
+          break;
+        case 'tradeRejected': {
+          const o = e.offer;
+          const next = later[0];
+          const counter = next?.type === 'tradeProposed' && next.offer.from === o.to && next.offer.to === o.from;
+          cue(counter ? 'trade.counter' : 'trade.decline', o.to);
+          break;
+        }
+        case 'promiseEnded':
+          cue('promise.ended');
+          break;
+        case 'gameOver':
+          cue('game.over', e.winner ?? undefined);
+          break;
         default:
           break;
       }

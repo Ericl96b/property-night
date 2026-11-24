@@ -8,6 +8,7 @@
   import { getPortrait } from '../../render/portraits';
   import Deed from './Deed.svelte';
   import { deedInfo, money } from '../present';
+  import { audio } from '../../audio';
 
   let {
     gs,
@@ -32,6 +33,14 @@
   onDestroy(() => clearInterval(tick));
   const left = $derived(deadline === null ? null : Math.max(0, deadline - now));
   const frac = $derived(left === null || !total ? 1 : left / total);
+  // The countdown ticks once per whole second (audio Phase 0 §4, auction.tick).
+  const second = $derived(left === null ? null : Math.ceil(left / 1000));
+  let lastSecond: number | null = null;
+  $effect(() => {
+    const sec = second;
+    if (sec !== null && lastSecond !== null && sec < lastSecond && sec > 0) audio.play('auction.tick');
+    lastSecond = sec;
+  });
 
   const leader = $derived(a.highBidder === null ? null : gs.seats[a.highBidder]);
   const bidders = $derived(gs.seats.map((s, i) => ({ s, i })).filter(({ s, i }) => !gs.players[i].bankrupt && s.kind !== 'bankBot'));

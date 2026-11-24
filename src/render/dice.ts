@@ -2,7 +2,7 @@
 // recessed pips via a normal map + dark pip albedo in a per-face texture atlas.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { DIE_SIZE, FACE_VALUES, type DiceThrow, samplePose, throwDuration } from './diceSim';
+import { DIE_SIZE, FACE_VALUES, STEP, type DiceContact, type DiceThrow, samplePose, throwDuration } from './diceSim';
 import { makeCanvas } from './noise';
 
 const PIPS: Record<number, [number, number][]> = {
@@ -146,7 +146,7 @@ export class Dice {
    * Animation for the queue: plays the pre-recorded throw back in real time × speed.
    * Returns a tick function (true while running) and the playback duration.
    */
-  play(th: DiceThrow, speed: number, onContact?: () => void): (dt: number) => boolean {
+  play(th: DiceThrow, speed: number, onContact?: (c: DiceContact) => void, onSettle?: () => void): (dt: number) => boolean {
     const dur = throwDuration(th);
     let t = 0;
     let nextContact = 0;
@@ -154,11 +154,13 @@ export class Dice {
     return (dt) => {
       t = Math.min(dur, t + dt * speed);
       this.pose(th, t);
-      while (nextContact < th.contacts.length && th.contacts[nextContact] * (1 / 120) <= t) {
-        onContact?.();
+      while (nextContact < th.contacts.length && th.contacts[nextContact].step * STEP <= t) {
+        onContact?.(th.contacts[nextContact]);
         nextContact++;
       }
-      return t < dur;
+      if (t < dur) return true;
+      onSettle?.();
+      return false;
     };
   }
 }

@@ -28,6 +28,8 @@ export interface BenchEnv {
   ensureBoard(board: BoardData): Promise<void>;
   /** The overlay shows moments for this state (null when the run ends). */
   setBenchState(s: State | null): void;
+  /** Muted for the whole run (audio Phase 0 §8.1); levels come back afterwards. */
+  sound?: { mute(key: string, on: boolean): void };
 }
 
 export interface BenchProgress {
@@ -116,6 +118,15 @@ export function systemInfo(scene: GameScene, hz: number, hzRaw: number): SystemI
  * Continuous rendering, speed, camera options and graphics settings are always restored.
  */
 export async function runBenchmark(env: BenchEnv, mode: BenchMode, onProgress: (p: BenchProgress) => void, signal: AbortSignal, renderHeight?: RenderHeight): Promise<BenchSummary | null> {
+  env.sound?.mute('bench', true);
+  try {
+    return await runMeasured(env, mode, onProgress, signal, renderHeight);
+  } finally {
+    env.sound?.mute('bench', false);
+  }
+}
+
+async function runMeasured(env: BenchEnv, mode: BenchMode, onProgress: (p: BenchProgress) => void, signal: AbortSignal, renderHeight?: RenderHeight): Promise<BenchSummary | null> {
   const { scene, director, settings } = env;
   const r = scene.renderer;
   // Resolution override for this run only (restored below, never saved).

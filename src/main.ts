@@ -24,7 +24,7 @@ import { BoardPresets, printView } from './app/boardPresets';
 import { AUTOSAVE_ID, Saves, makeSave, migrateSave, type SaveFile } from './app/saves';
 import { downloadText } from './app/presets';
 import { CLASSIC_RULES } from './engine';
-import { Sound } from './audio/sound';
+import { audio } from './audio';
 import * as THREE from 'three';
 import { BOARD_TOP, tileAt } from './render/layout';
 import { TestBoard } from './bench/testBoard';
@@ -101,12 +101,12 @@ async function boot(): Promise<void> {
     screenOpen: () => app?.screenOpen() ?? false,
   });
   director.settings = () => settings;
-  // Sound starts on the first key, click, touch or controller button (browser autoplay rules).
-  const sound = new Sound();
+  // Sound (audio Phase 0): files preload now; playback starts on the first key, click, touch or
+  // controller button (browser autoplay rules). The engine owns its unlock and tab-hidden logic.
+  const sound = audio;
+  sound.attach();
   director.sound = sound;
   const unlockAudio = () => sound.unlock();
-  for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, unlockAudio, { capture: true });
-  document.addEventListener('visibilitychange', () => sound.setHidden(document.hidden));
   controller = new GameController(director);
 
   const input = new InputManager(undefined, undefined, browserStore);
@@ -181,6 +181,7 @@ async function boot(): Promise<void> {
     await ensureBoard(f.snapshot.board, f.snapshot.rules);
     createdAt = f.createdAt;
     controller.load(f.snapshot, f.actions, f.seed);
+    sound.play('save.load');
     input.clearBindings();
     f.snapshot.seats.forEach((s, i) => s.controllerId && input.bind(s.controllerId, i));
     director.resetCamera(f.snapshot, (f.view?.cameraSide ?? sideOfTile(f.snapshot.players[f.snapshot.turn.seat].position)) as 0 | 1 | 2 | 3);
@@ -190,6 +191,7 @@ async function boot(): Promise<void> {
     createdAt = Date.now();
     renderPortraits(cfg.seats.map((s) => ({ token: s.token ?? 'teacup', color: s.color ?? '#7B3FE4' })));
     controller.start(cfg);
+    sound.play('game.start');
     // Seats are shuffled into turn order: bind each controller to its seat's final index.
     input.clearBindings();
     controller.state.seats.forEach((s, i) => s.controllerId && input.bind(s.controllerId, i));
@@ -229,7 +231,7 @@ async function boot(): Promise<void> {
     renderHeight: () => settings.renderHeight,
     run: (mode, onProgress, signal, renderHeight) =>
       runBenchmark(
-        { scene, director, settings, ensureBoard: (b) => ensureBoard(b, CLASSIC_RULES), setBenchState: (st) => app.setBenchState(st) },
+        { scene, director, settings, sound, ensureBoard: (b) => ensureBoard(b, CLASSIC_RULES), setBenchState: (st) => app.setBenchState(st) },
         mode,
         onProgress,
         signal,
@@ -295,6 +297,7 @@ async function boot(): Promise<void> {
       },
       onsaveslot: async (slot: number, name: string) => {
         await saves.saveSlot(slot, snapshotSave(`slot-${slot}`, name));
+        sound.play('save.write');
       },
       onexport: () => {
         const f = snapshotSave('export', `Game ${new Date().toLocaleDateString()}`);
@@ -302,6 +305,7 @@ async function boot(): Promise<void> {
       },
       settings,
       onstart: async (seats: SeatConfig[], randomOrder: boolean, rulesId: string, boardId: string) => {
+        sound.play('ui.lobby.start');
         const seed = Number(params.get('seed') ?? Math.floor(Math.random() * 2 ** 31));
         // The game keeps its own copies of the rules, board and cards (editing a preset never
         // changes a game in progress).

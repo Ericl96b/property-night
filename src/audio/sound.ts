@@ -1,73 +1,142 @@
-// Sound (SPEC §9): every sound is synthesized with WebAudio at run time, nothing is shipped.
-// Dice clatter, token tap, coins, card flip, building "tock", and light generative background
-// music, with master / music / effects volumes (SPEC §13 settings).
+// Sound engine (SPEC §9, audio Phase 0). Every sound is played by registry ID
+// (`sound.play('dice.bounce.wood', { intensity })`), resolved as loaded files → synth fallback
+// → silence. The engine owns the audio context lifecycle (first-gesture unlock, hidden-tab
+// suspend), the ui / sfx / music buses, voice limits, batching and music ducking.
+import { REGISTRY, isSoundId, type Bus, type SoundId } from './registry';
+import { SYNTHS, coinCount } from './synths';
+import { GenerativeMusic } from './music';
+import { AudioLoader } from './loader';
+import { VoiceManager } from './voices';
+import { Batcher, type BatchItem } from './batch';
+import { pickVariation } from './variation';
 
-export interface SoundFx {
-  dice(): void;
-  tap(): void;
-  coins(amount: number): void;
-  card(): void;
-  tock(remove?: boolean): void;
-  /** Short sting for a moment banner (SPEC §10.9): bright for wins and sets, low for bad news. */
-  sting(mood: 'good' | 'bad'): void;
+export { coinCount };
+export type { SoundId };
+
+export interface PlayCtx {
+  /** 0–1: scales the level; synth fallbacks may use it (dice: impact speed). */
+  intensity?: number;
+  /** Money: passed to the coins synth (1–6 clinks). */
+  amount?: number;
+  /** Bot actions use the entry's botGain. */
+  isBot?: boolean;
+  /** The acting seat. */
+  seat?: number;
+  payer?: number | 'bank';
+  payee?: number | 'bank';
+  /** Play on another bus than the registry's (only the volume preview needs this). */
+  bus?: Bus;
 }
 
-export const SILENT: SoundFx = { dice() {}, tap() {}, coins() {}, card() {}, tock() {}, sting() {} };
+/** What callers need (the director, UI, tests). */
+export interface SoundApi {
+  play(id: SoundId, ctx?: PlayCtx): void;
+  beginBatch(): void;
+  endBatch(): void;
+  /** Lower the music by `amountDb` for `ms` (Infinity holds until `duck(0, 0)`). */
+  duck(amountDb: number, ms: number): void;
+}
+
+/** No-op sound for tests and before the app wires audio. */
+export const SILENT: SoundApi = { play() {}, beginBatch() {}, endBatch() {}, duck() {} };
 
 export interface Volumes {
   volumeMaster: number;
   volumeMusic: number;
   volumeEffects: number;
+  volumeUi: number;
 }
 
 const clamp01 = (v: number) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
 
-/** Final bus gains: master scales both buses; a perceptual (squared) curve on each slider. */
-export function mixGains(v: Volumes): { music: number; effects: number } {
+/** Final bus gains: master scales every bus; a perceptual (squared) curve on each slider. */
+export function mixGains(v: Volumes): { music: number; effects: number; ui: number } {
   const m = clamp01(v.volumeMaster) ** 2;
-  return { music: m * clamp01(v.volumeMusic) ** 2 * 0.35, effects: m * clamp01(v.volumeEffects) ** 2 };
+  return {
+    music: m * clamp01(v.volumeMusic) ** 2 * 0.35,
+    effects: m * clamp01(v.volumeEffects) ** 2,
+    ui: m * clamp01(v.volumeUi) ** 2,
+  };
 }
 
-/** How many coin clinks a payment of `amount` makes (1–6). */
-export function coinCount(amount: number): number {
-  if (!(amount > 0)) return 0;
-  return Math.min(6, 1 + Math.floor(Math.log2(Math.max(1, amount / 25))));
-}
+export type SoundStatus = { kind: 'file'; count: number } | { kind: 'synth' } | { kind: 'silent' };
 
-/** Drops events closer together than `minGap` seconds (taps and dice contacts at high speed). */
-export class Throttle {
-  private last = -Infinity;
-  constructor(private minGap: number) {}
-  ok(now: number): boolean {
-    if (now - this.last < this.minGap) return false;
-    this.last = now;
-    return true;
-  }
-}
+const PAUSE_HOLD = 'hold';
 
-// Music: F major, four chords, soft pad + sparse pentatonic plucks.
-const midi = (n: number) => 440 * 2 ** ((n - 69) / 12);
-const CHORDS = [
-  [53, 57, 60, 64], // Fmaj7
-  [50, 53, 57, 60], // Dm7
-  [46, 50, 53, 57], // Bbmaj7
-  [48, 52, 55, 60], // C
-];
-const PENTA = [65, 67, 69, 72, 74, 77, 79, 81];
-const BPM = 80;
-
-export class Sound implements SoundFx {
+export class Sound implements SoundApi {
   private ctx: AudioContext | null = null;
-  private musicBus!: GainNode;
-  private fxBus!: GainNode;
+  private buses!: Record<Bus, GainNode>;
+  private musicOut!: GainNode;
+  private duckGain!: GainNode;
   private noise!: AudioBuffer;
-  private volumes: Volumes = { volumeMaster: 0.8, volumeMusic: 0.4, volumeEffects: 0.8 };
-  private taps = new Throttle(0.045);
-  private contacts = new Throttle(0.03);
-  private musicTimer: ReturnType<typeof setInterval> | null = null;
-  private nextBeat = 0;
-  private beat = 0;
+  private volumes: Volumes = { volumeMaster: 0.8, volumeMusic: 0.4, volumeEffects: 0.8, volumeUi: 0.7 };
+  private mutes = new Set<string>();
+  private voices = new VoiceManager();
+  private batcher = new Batcher<PlayCtx>((items) => this.flushBatch(items));
+  private lastVariation = new Map<string, number>();
+  private music: GenerativeMusic | null = null;
+  private musicLoop: AudioBufferSourceNode | null = null;
+  private ducks = new Map<string, { db: number; until: number }>();
+  private duckSeq = 0;
   private seed = 12345;
+  private attached = false;
+  private preload: Promise<void> | null = null;
+  readonly loader: AudioLoader;
+  /** Dev counters (`__pn.sound.stats`): what played and how. */
+  readonly stats = { started: 0, log: [] as { id: string; via: 'file' | 'synth'; at: number }[] };
+
+  constructor(
+    private manifest: Record<string, readonly string[]> = {},
+    opts: { loader?: AudioLoader; now?: () => number } = {},
+  ) {
+    this.loader = opts.loader ?? new AudioLoader();
+    if (opts.now) this.now = opts.now;
+  }
+
+  private now = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+  // ---- lifecycle -------------------------------------------------------------------------------
+
+  /**
+   * Start preloading and listen for the first gesture (browsers only allow audio after one) and
+   * for the tab being hidden. Safe to call once at startup; a no-op outside a browser.
+   */
+  attach(): void {
+    if (this.attached || typeof window === 'undefined') return;
+    this.attached = true;
+    const unlock = () => this.unlock();
+    for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, unlock, { capture: true });
+    document.addEventListener('visibilitychange', () => this.setHidden(document.hidden));
+    this.preloadFiles();
+  }
+
+  /** Fetch and decode every registered file (can run before the unlock). */
+  preloadFiles(): Promise<void> {
+    this.preload ??= this.loader.load(this.manifestWithExtras(), isSoundId).then(() => this.updateMusic(true));
+    return this.preload;
+  }
+
+  private manifestWithExtras(): Record<string, readonly string[]> {
+    const m: Record<string, readonly string[]> = { ...this.manifest };
+    for (const [id, d] of Object.entries(REGISTRY)) if (d.files.length) m[id] = [...(m[id] ?? []), ...d.files];
+    return m;
+  }
+
+  /** Dev (Sound Test): re-read the file list and decode again, so dropped-in files play. */
+  async reloadFiles(): Promise<void> {
+    if (import.meta.env?.DEV) {
+      try {
+        const res = await fetch('/__audio-manifest', { cache: 'no-store' });
+        if (res.ok) this.manifest = await res.json();
+      } catch {
+        /* keep the old list */
+      }
+    }
+    this.loader.clear();
+    this.lastVariation.clear();
+    this.preload = null;
+    await this.preloadFiles();
+  }
 
   /** Create/resume the audio context. Browsers allow this only after a user gesture. */
   unlock(): void {
@@ -81,16 +150,23 @@ export class Sound implements SoundFx {
         comp.threshold.value = -14;
         comp.ratio.value = 4;
         comp.connect(ctx.destination);
-        this.musicBus = ctx.createGain();
-        this.fxBus = ctx.createGain();
-        this.musicBus.connect(comp);
-        this.fxBus.connect(comp);
+        const bus = () => {
+          const g = ctx.createGain();
+          g.connect(comp);
+          return g;
+        };
+        this.buses = { ui: bus(), sfx: bus(), music: bus() };
+        this.duckGain = ctx.createGain();
+        this.duckGain.connect(this.buses.music);
+        this.musicOut = ctx.createGain();
+        this.musicOut.gain.value = REGISTRY['music.main'].gain;
+        this.musicOut.connect(this.duckGain);
         const len = ctx.sampleRate;
         this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
         const d = this.noise.getChannelData(0);
         for (let i = 0; i < len; i++) d[i] = this.rand() * 2 - 1;
-        this.setVolumes(this.volumes);
-        this.startMusic();
+        this.applyVolumes();
+        this.recomputeDuck();
       }
       if (this.ctx.state === 'suspended') void this.ctx.resume();
     } catch {
@@ -98,31 +174,141 @@ export class Sound implements SoundFx {
     }
   }
 
-  get running(): boolean {
-    return this.ctx?.state === 'running';
-  }
-
-  setVolumes(v: Volumes): void {
-    this.volumes = { volumeMaster: v.volumeMaster, volumeMusic: v.volumeMusic, volumeEffects: v.volumeEffects };
-    if (!this.ctx) return;
-    const g = mixGains(v);
-    const t = this.ctx.currentTime;
-    this.musicBus.gain.setTargetAtTime(g.music, t, 0.05);
-    this.fxBus.gain.setTargetAtTime(g.effects, t, 0.02);
-  }
-
-  /** Pause the music scheduler while the page is hidden. */
   setHidden(hidden: boolean): void {
     if (!this.ctx) return;
     if (hidden) void this.ctx.suspend();
     else void this.ctx.resume();
   }
 
-  // ---- effects ---------------------------------------------------------------------------------
+  // ---- levels ----------------------------------------------------------------------------------
 
-  private live(): AudioContext | null {
+  setVolumes(v: Volumes): void {
+    this.volumes = { volumeMaster: v.volumeMaster, volumeMusic: v.volumeMusic, volumeEffects: v.volumeEffects, volumeUi: v.volumeUi };
+    this.applyVolumes();
+  }
+
+  /** Silence effects and music under a named layer (the benchmark), without touching settings. */
+  mute(key: string, on: boolean): void {
+    if (on) this.mutes.add(key);
+    else this.mutes.delete(key);
+    this.applyVolumes();
+  }
+
+  /** Effective bus gains (settings × mutes). */
+  busGains(): Record<Bus, number> {
+    const g = mixGains(this.volumes);
+    const muted = this.mutes.size > 0;
+    return { ui: g.ui, sfx: muted ? 0 : g.effects, music: muted ? 0 : g.music };
+  }
+
+  private applyVolumes(): void {
+    if (!this.ctx) return;
+    const g = this.busGains();
+    const t = this.ctx.currentTime;
+    this.buses.music.gain.setTargetAtTime(g.music, t, 0.05);
+    this.buses.sfx.gain.setTargetAtTime(g.sfx, t, 0.02);
+    this.buses.ui.gain.setTargetAtTime(g.ui, t, 0.02);
+    this.updateMusic();
+  }
+
+  // ---- music -----------------------------------------------------------------------------------
+
+  /** Music runs only while it can be heard: the scheduler stops at an effective level of 0. */
+  private updateMusic(restart = false): void {
     const c = this.ctx;
-    return c && c.state === 'running' && mixGains(this.volumes).effects > 0 ? c : null;
+    if (!c) return;
+    const on = this.busGains().music > 0;
+    const files = this.loader.get('music.main');
+    if (restart || !on) this.stopMusic();
+    if (!on || this.music?.playing || this.musicLoop) return;
+    if (files.length) {
+      const src = c.createBufferSource();
+      src.buffer = files[0];
+      src.loop = true;
+      src.connect(this.musicOut);
+      src.start(c.currentTime + 0.05);
+      this.musicLoop = src;
+      return;
+    }
+    this.music ??= new GenerativeMusic({ ctx: c, out: this.musicOut, noise: this.noise, rand: () => this.rand(), pitch: 1 });
+    this.music.start();
+  }
+
+  private stopMusic(): void {
+    this.music?.stop();
+    if (this.musicLoop) {
+      try {
+        this.musicLoop.stop();
+      } catch {
+        /* not started */
+      }
+      this.musicLoop.disconnect();
+      this.musicLoop = null;
+    }
+  }
+
+  get musicPlaying(): boolean {
+    return !!(this.music?.playing || this.musicLoop);
+  }
+
+  duck(amountDb: number, ms: number): void {
+    if (ms === Infinity) this.ducks.set(PAUSE_HOLD, { db: amountDb, until: Infinity });
+    else if (amountDb === 0 && ms === 0) this.ducks.delete(PAUSE_HOLD);
+    else {
+      const key = `d${this.duckSeq++}`;
+      this.ducks.set(key, { db: amountDb, until: this.now() + ms });
+      setTimeout(() => {
+        this.ducks.delete(key);
+        this.recomputeDuck();
+      }, ms);
+    }
+    this.recomputeDuck();
+  }
+
+  /** The current duck depth in dB (the deepest active one). */
+  get duckDb(): number {
+    let db = 0;
+    for (const d of this.ducks.values()) db = Math.min(db, d.db);
+    return db;
+  }
+
+  private recomputeDuck(): void {
+    if (!this.ctx) return;
+    this.duckGain.gain.setTargetAtTime(10 ** (this.duckDb / 20), this.ctx.currentTime, 0.08);
+  }
+
+  // ---- playback --------------------------------------------------------------------------------
+
+  /** What an ID would play now: files, the synth fallback, or nothing. */
+  status(id: SoundId): SoundStatus {
+    const n = this.loader.get(id).length;
+    if (n) return { kind: 'file', count: n };
+    const synth = REGISTRY[id]?.synth;
+    return synth ? { kind: 'synth' } : { kind: 'silent' };
+  }
+
+  beginBatch(): void {
+    this.batcher.begin();
+  }
+
+  endBatch(): void {
+    this.batcher.end();
+  }
+
+  private flushBatch(items: BatchItem<PlayCtx>[]): void {
+    for (const it of items) this.playNow(it.id as SoundId, it.ctx);
+  }
+
+  play(id: SoundId, ctx: PlayCtx = {}): void {
+    const def = REGISTRY[id];
+    if (!def) return;
+    if (this.batcher.add({ id, priority: def.priority, ctx })) return;
+    this.playNow(id, ctx);
+  }
+
+  private live(bus: Bus): AudioContext | null {
+    const c = this.ctx;
+    return c && c.state === 'running' && this.busGains()[bus] > 0 ? c : null;
   }
 
   private rand(): number {
@@ -131,147 +317,71 @@ export class Sound implements SoundFx {
     return this.seed / 2 ** 32;
   }
 
-  private env(c: AudioContext, at: number, peak: number, attack: number, decay: number): GainNode {
-    const g = c.createGain();
-    g.gain.setValueAtTime(0.0001, at);
-    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), at + attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, at + attack + decay);
-    return g;
-  }
-
-  private noiseHit(c: AudioContext, at: number, type: BiquadFilterType, freq: number, q: number, peak: number, decay: number, out: AudioNode = this.fxBus): void {
-    const src = c.createBufferSource();
-    src.buffer = this.noise;
-    const f = c.createBiquadFilter();
-    f.type = type;
-    f.frequency.value = freq;
-    f.Q.value = q;
-    const g = this.env(c, at, peak, 0.002, decay);
-    src.connect(f).connect(g).connect(out);
-    src.start(at, this.rand() * 0.8);
-    src.stop(at + decay + 0.05);
-  }
-
-  private tone(c: AudioContext, at: number, type: OscillatorType, freq: number, peak: number, attack: number, decay: number, out: AudioNode = this.fxBus, glideTo?: number): void {
-    const o = c.createOscillator();
-    o.type = type;
-    o.frequency.setValueAtTime(freq, at);
-    if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, at + attack + decay);
-    const g = this.env(c, at, peak, attack, decay);
-    o.connect(g).connect(out);
-    o.start(at);
-    o.stop(at + attack + decay + 0.05);
-  }
-
-  /** One die contact: a woody knock with a little rattle. */
-  dice(): void {
-    const c = this.live();
-    if (!c || !this.contacts.ok(c.currentTime)) return;
-    const t = c.currentTime + 0.005;
-    const v = 0.35 + this.rand() * 0.4;
-    this.noiseHit(c, t, 'bandpass', 1800 + this.rand() * 1600, 3, 0.5 * v, 0.06);
-    this.tone(c, t, 'triangle', 300 + this.rand() * 160, 0.25 * v, 0.002, 0.05);
-  }
-
-  /** A brass token setting down on a tile. */
-  tap(): void {
-    const c = this.live();
-    if (!c || !this.taps.ok(c.currentTime)) return;
-    const t = c.currentTime + 0.005;
-    this.tone(c, t, 'sine', 1300 + this.rand() * 200, 0.12, 0.001, 0.07, this.fxBus, 900);
-    this.noiseHit(c, t, 'highpass', 3500, 0.7, 0.06, 0.025);
-  }
-
-  /** Coins changing hands; more clinks for bigger amounts. */
-  coins(amount: number): void {
-    const c = this.live();
+  private playNow(id: SoundId, ctx: PlayCtx): void {
+    const def = REGISTRY[id];
+    if (def.loop) return; // music is started by the engine, not by callers
+    const st = this.status(id);
+    if (st.kind === 'silent') return;
+    const c = this.live(ctx.bus ?? def.bus);
     if (!c) return;
-    const n = coinCount(amount);
-    for (let k = 0; k < n; k++) {
-      const t = c.currentTime + 0.01 + k * (0.055 + this.rand() * 0.03);
-      const f = 2300 + this.rand() * 900;
-      this.tone(c, t, 'sine', f, 0.09, 0.001, 0.32);
-      this.tone(c, t, 'sine', f * 1.53, 0.05, 0.001, 0.22);
-      this.noiseHit(c, t, 'highpass', 6000, 0.7, 0.05, 0.02);
+    const now = this.now();
+    const adm = this.voices.admit(id, def, now);
+    for (const v of adm.evict) v.stop();
+    if (!adm.ok) return;
+
+    const intensity = ctx.intensity === undefined ? 1 : Math.min(1, Math.max(0, ctx.intensity));
+    const jitterDb = def.gainJitter ? (this.rand() * 2 - 1) * def.gainJitter : 0;
+    const semis = def.pitchJitter ? (this.rand() * 2 - 1) * def.pitchJitter : 0;
+    let level = def.gain * 10 ** (jitterDb / 20) * (ctx.isBot ? def.botGain : 1);
+    // Files have no notion of intensity: scale them (softly, so quiet hits stay audible).
+    // Synths get the intensity as a parameter instead (dice uses it for its level).
+    if (st.kind === 'file' && ctx.intensity !== undefined) level *= 0.35 + 0.65 * intensity;
+
+    const voice = c.createGain();
+    voice.gain.value = level;
+    voice.connect(this.buses[ctx.bus ?? def.bus]);
+    const at = c.currentTime + 0.005;
+    let dur: number;
+    let src: AudioBufferSourceNode | null = null;
+    if (st.kind === 'file') {
+      const bufs = this.loader.get(id);
+      const k = pickVariation(bufs.length, this.lastVariation.get(id) ?? -1, () => this.rand());
+      this.lastVariation.set(id, k);
+      src = c.createBufferSource();
+      src.buffer = bufs[k];
+      src.playbackRate.value = 2 ** (semis / 12);
+      src.connect(voice);
+      src.start(at);
+      dur = bufs[k].duration / src.playbackRate.value;
+    } else {
+      const synth = SYNTHS[def.synth as keyof typeof SYNTHS];
+      dur = synth({ ctx: c, out: voice, noise: this.noise, rand: () => this.rand(), pitch: 2 ** (semis / 12) }, at, { intensity: ctx.intensity, amount: ctx.amount });
     }
-  }
-
-  /** Card flip: a short papery swish. */
-  card(): void {
-    const c = this.live();
-    if (!c) return;
-    const t = c.currentTime + 0.005;
-    const src = c.createBufferSource();
-    src.buffer = this.noise;
-    const f = c.createBiquadFilter();
-    f.type = 'bandpass';
-    f.Q.value = 1.2;
-    f.frequency.setValueAtTime(900, t);
-    f.frequency.exponentialRampToValueAtTime(4200, t + 0.14);
-    const g = this.env(c, t, 0.35, 0.03, 0.13);
-    src.connect(f).connect(g).connect(this.fxBus);
-    src.start(t, this.rand() * 0.5);
-    src.stop(t + 0.25);
-  }
-
-  /** Building placed (or removed): a wood-block tock. */
-  tock(remove = false): void {
-    const c = this.live();
-    if (!c) return;
-    const t = c.currentTime + 0.005;
-    const base = remove ? 380 : 560;
-    this.tone(c, t, 'sine', base, 0.35, 0.001, 0.11);
-    this.tone(c, t, 'sine', base * 2.4, 0.12, 0.001, 0.05);
-    this.noiseHit(c, t, 'bandpass', base * 3, 4, 0.12, 0.03);
-  }
-
-  sting(mood: 'good' | 'bad'): void {
-    const c = this.live();
-    if (!c) return;
-    const t = c.currentTime + 0.01;
-    // Good: a rising major arpeggio (F A C F). Bad: a falling minor third over a low note.
-    const notes = mood === 'good' ? [65, 69, 72, 77] : [60, 56, 53];
-    notes.forEach((n, k) => {
-      const at = t + k * (mood === 'good' ? 0.09 : 0.14);
-      this.tone(c, at, 'triangle', midi(n), 0.16, 0.006, mood === 'good' ? 0.5 : 0.6);
-      this.tone(c, at, 'sine', midi(n + 12), 0.05, 0.006, 0.3);
+    const end = () => voice.disconnect();
+    const timer = setTimeout(end, (dur + 0.3) * 1000);
+    this.voices.add({
+      id,
+      priority: def.priority,
+      startedAt: now,
+      endsAt: now + (dur + 0.05) * 1000,
+      stop: () => {
+        // A short fade, then cut.
+        const t = c.currentTime;
+        voice.gain.cancelScheduledValues(t);
+        voice.gain.setValueAtTime(voice.gain.value, t);
+        voice.gain.linearRampToValueAtTime(0, t + 0.01);
+        try {
+          src?.stop(t + 0.02);
+        } catch {
+          /* already stopped */
+        }
+        clearTimeout(timer);
+        setTimeout(end, 50);
+      },
     });
-    if (mood === 'bad') this.tone(c, t, 'sine', midi(41), 0.22, 0.02, 0.9);
-  }
-
-  // ---- music -----------------------------------------------------------------------------------
-
-  private startMusic(): void {
-    if (this.musicTimer || !this.ctx) return;
-    this.nextBeat = this.ctx.currentTime + 0.3;
-    this.musicTimer = setInterval(() => this.scheduleMusic(), 120);
-  }
-
-  private scheduleMusic(): void {
-    const c = this.ctx;
-    if (!c || c.state !== 'running') return;
-    const eighth = 60 / BPM / 2;
-    if (this.nextBeat < c.currentTime - 1) this.nextBeat = c.currentTime + 0.05;
-    const silent = mixGains(this.volumes).music <= 0;
-    while (this.nextBeat < c.currentTime + 0.4) {
-      const t = this.nextBeat;
-      const bar = Math.floor(this.beat / 8);
-      const chord = CHORDS[bar % CHORDS.length];
-      if (!silent) {
-        if (this.beat % 8 === 0) {
-          // Pad: the chord, softly, for the whole bar.
-          for (const n of chord) this.tone(c, t, 'triangle', midi(n), 0.05, 0.6, eighth * 8, this.musicBus);
-          this.tone(c, t, 'sine', midi(chord[0] - 12), 0.1, 0.05, eighth * 7, this.musicBus);
-        }
-        if (this.beat % 2 === 0 || this.rand() < 0.3) {
-          if (this.rand() < 0.42) {
-            const n = PENTA[Math.floor(this.rand() * PENTA.length)];
-            this.tone(c, t, 'triangle', midi(n), 0.07, 0.004, 0.5, this.musicBus);
-          }
-        }
-      }
-      this.beat++;
-      this.nextBeat += eighth;
-    }
+    if (def.duck) this.duck(def.duck.db, def.duck.ms);
+    this.stats.started++;
+    this.stats.log.push({ id, via: st.kind, at: now });
+    if (this.stats.log.length > 50) this.stats.log.shift();
   }
 }

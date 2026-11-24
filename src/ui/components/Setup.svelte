@@ -2,6 +2,7 @@
   // Lobby (SPEC §3, §4, §9): seats (Human / Bot / Bank-backed bot), token, color, controller
   // ("press any button to join" binds a pad to the next human seat), rules and board presets,
   // and turn order (random, or as listed with ▲/▼ reordering).
+  import { audio } from '../../audio';
   import { onDestroy, onMount } from 'svelte';
   import { seatsLockPromises, type SeatConfig } from '../../engine';
   import { PROMISES_LOCK_REASON } from '../../app/rulesSchema';
@@ -82,7 +83,10 @@
       return;
     }
     const seat = seats.find((s) => s.kind === 'human' && !s.controllerId);
-    if (seat) seat.controllerId = deviceId;
+    if (seat) {
+      seat.controllerId = deviceId;
+      audio.play('ui.lobby.join');
+    }
   }
 
   let prevJoin: (id: string) => void;

@@ -6,6 +6,7 @@
   //             decline (focus + Confirm only; Back never decides, Stage 1 rule).
   //   waiting — the proposer waits (bot receiver, or Back pressed on the proposer's pad), with
   //             Withdraw.
+  import { audio } from '../../audio';
   import { PROMISE_GROUP_ORDER, promiseGroupOf, samePromise, type PromiseGroup, type PromiseTerm, type State, type TradeOffer } from '../../engine';
   import type { Intent } from '../../input/keys';
   import { getPortrait } from '../../render/portraits';
@@ -126,10 +127,13 @@
     const i = side.tiles.indexOf(tile);
     if (i >= 0) side.tiles.splice(i, 1);
     else side.tiles.push(tile);
+    audio.play(i >= 0 ? 'trade.removeItem' : 'trade.addItem', { seat });
   }
   function toggleJail(who: number, i: number) {
     const side = sideOf(offer, who);
+    const before = side.gojf;
     side.gojf = i < side.gojf ? side.gojf - 1 : Math.min(gs.players[who].gojf.length, side.gojf + 1);
+    if (side.gojf !== before) audio.play(side.gojf > before ? 'trade.addItem' : 'trade.removeItem', { seat });
   }
   function setPartner(p: number) {
     if (p === offer.to) return;
@@ -145,7 +149,9 @@
   }
   function closeCash(keep: boolean) {
     if (!cashEd) return;
-    if (!keep) sideOf(offer, cashEd.who).cash = cashEd.before;
+    const side = sideOf(offer, cashEd.who);
+    if (!keep) side.cash = cashEd.before;
+    else if (side.cash !== cashEd.before) audio.play(side.cash > cashEd.before ? 'trade.addItem' : 'trade.removeItem', { seat });
     cashEd = null;
   }
 
@@ -197,13 +203,16 @@
   }
   function saveVoucher() {
     if (!draft || !draftTerm || draftProblem) return;
-    if (draft.index === null) offer.promises.push({ ...draftTerm });
-    else offer.promises[draft.index] = { ...draftTerm };
+    if (draft.index === null) {
+      offer.promises.push({ ...draftTerm });
+      audio.play('trade.addPromise', { seat });
+    } else offer.promises[draft.index] = { ...draftTerm };
     draft = null;
   }
   function removeVoucher() {
     if (!draft || draft.index === null) return;
     offer.promises.splice(draft.index, 1);
+    audio.play('trade.removePromise', { seat });
     draft = null;
   }
   const onstep = (f: (d: number) => boolean) => (e: Event) => {
@@ -218,6 +227,7 @@
   function startHold(source: 'pad' | 'mouse') {
     if (holding || mode !== 'review') return;
     holding = true;
+    audio.play('trade.holdProgress', { seat, intensity: 0 });
     const t0 = performance.now();
     const step = () => {
       const held = source === 'mouse' ? mouseDown : isConfirmHeld(seat);

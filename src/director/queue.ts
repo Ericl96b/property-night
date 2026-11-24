@@ -23,6 +23,11 @@ export class AnimationQueue {
   private current?: { anim: Animation; tick?: (dt: number) => boolean };
   speed: Speed = 'normal';
   onIdle?: () => void;
+  /**
+   * Audio Phase 0 §6: everything started together (a skip, or several instant items in one
+   * frame) runs inside one sound batch, so their sounds don't all fire at once.
+   */
+  batch?: { begin(): void; end(): void };
   private wasBusy = false;
 
   get factor(): number {
@@ -46,12 +51,17 @@ export class AnimationQueue {
 
   /** Skip everything queued: each animation jumps straight to its end state. */
   flush(): void {
-    this.skip();
-    let guard = 0;
-    while (this.queue.length && guard++ < 10_000) {
-      const next = this.queue.shift()!;
-      next.start();
-      next.finish?.();
+    this.batch?.begin();
+    try {
+      this.skip();
+      let guard = 0;
+      while (this.queue.length && guard++ < 10_000) {
+        const next = this.queue.shift()!;
+        next.start();
+        next.finish?.();
+      }
+    } finally {
+      this.batch?.end();
     }
     this.wasBusy = false;
     this.onIdle?.();
@@ -59,6 +69,15 @@ export class AnimationQueue {
 
   /** Advance by dt seconds of wall time. Returns true while busy. */
   update(dt: number): boolean {
+    this.batch?.begin();
+    try {
+      return this.step(dt);
+    } finally {
+      this.batch?.end();
+    }
+  }
+
+  private step(dt: number): boolean {
     let budget = 8; // allow several instant animations to complete in one frame
     while (budget-- > 0) {
       if (!this.current) {

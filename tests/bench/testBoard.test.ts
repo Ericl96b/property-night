@@ -97,7 +97,7 @@ describe('test board isolation (§4.1.3)', () => {
     const scene = fakeScene();
     const synced: State[] = [];
     const director = { sync: (s: State) => synced.push(s) };
-    const tb = new TestBoard({ scene: scene as unknown as GameScene, director: director as unknown as Director, sound: { tock: () => {} }, ensureBoard: async () => {}, onChange: () => {} }, CLASSIC_BOARD);
+    const tb = new TestBoard({ scene: scene as unknown as GameScene, director: director as unknown as Director, sound: { play: () => {} }, ensureBoard: async () => {}, onChange: () => {} }, CLASSIC_BOARD);
     tb.enter();
     expect(scene.camera.settings.reduceMotion).toBe(false); // forced while in the test board
     for (const p of ['allHouses', 'allHotels', 'worstCase', 'empty'] as const) tb.applyPreset(p);
@@ -148,7 +148,7 @@ describe('Camera panel (Stage 2 §6)', () => {
     scene.camera.settings = { rotation: false, follow: false, reduceMotion: false, style: 'table' };
     const played: unknown[] = [];
     const director = { sync: () => {}, play: (e: unknown[]) => played.push(...e) };
-    const tb = new TestBoard({ scene: scene as unknown as GameScene, director: director as unknown as Director, sound: { tock: () => {} }, ensureBoard: async () => {}, onChange: () => {} }, CLASSIC_BOARD);
+    const tb = new TestBoard({ scene: scene as unknown as GameScene, director: director as unknown as Director, sound: { play: () => {} }, ensureBoard: async () => {}, onChange: () => {} }, CLASSIC_BOARD);
     tb.enter();
     tb.setTuning(true);
     expect(scene.camera.settings.style).toBe('closeup');

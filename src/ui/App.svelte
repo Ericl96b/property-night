@@ -32,11 +32,14 @@
   import { gameOverText, players, primaryButtons } from './present';
   import { symbolUrl } from '../render/symbols';
   import BenchmarkPanel from './components/BenchmarkPanel.svelte';
+  import SoundTest from './components/SoundTest.svelte';
   import TestBoardControls from './components/TestBoard.svelte';
   import PerfOverlay from './components/PerfOverlay.svelte';
   import type { PerfApi } from '../bench/perfApi';
   import type { TestBoard } from '../bench/testBoard';
   import type { State } from '../engine';
+  import { audio } from '../audio';
+  import { installUiSounds } from '../audio/ui';
 
   let {
     controller,
@@ -94,7 +97,7 @@
   }
   let waitingSeat = $state<number | null>(null);
   let loanSeat = $state<number | null>(null);
-  let screen = $state<'menu' | 'setup' | 'testboard'>('menu');
+  let screen = $state<'menu' | 'setup' | 'testboard' | 'soundtest'>('menu');
 
   // Batch 4: benchmark, test board and performance overlay.
   let benchOpen = $state(false);
@@ -188,7 +191,10 @@
     // Mouse hover moves the same single focus as the controller.
     const over = (e: PointerEvent) => hoverFocus(e.target, topPanel());
     document.addEventListener('pointerover', over);
+    // Confirm and toggle sounds for every control (audio Phase 0 §5).
+    const uninstallUiSounds = installUiSounds();
     return () => {
+      uninstallUiSounds();
       unsub();
       window.removeEventListener('resize', fit);
       document.removeEventListener('pointerover', over);
@@ -263,6 +269,8 @@
     if (!gs) return;
     if (gs.phase === 'trade' && gs.trade!.to === seat) compose = { seat, initial: counterOf(gs.trade!), counter: true };
     else if (canPropose && gs.turn.seat === seat) compose = { seat, initial: null, counter: false };
+    else return;
+    audio.play('trade.open', { seat });
   }
 
   function submitTrade(o: TradeOffer) {
@@ -293,6 +301,12 @@
   }
 
   function setPaused(p: boolean) {
+    if (p !== paused) {
+      audio.play(p ? 'ui.pause' : 'ui.resume');
+      // The music ducks while the game is paused (audio Phase 0 §7).
+      if (p) audio.duck(-12, Infinity);
+      else audio.duck(0, 0);
+    }
     paused = p;
     if (!p) savingOpen = false; // closing the pause menu closes its submenus too
     controller.setPaused(p);
@@ -317,8 +331,14 @@
       if (d) focusEl(d);
     }, 0);
   }
-  stackHooks.opened = ensureFocus;
-  stackHooks.closed = ensureFocus;
+  stackHooks.opened = (l) => {
+    if (l.opts.kind !== 'root') audio.play('ui.open');
+    ensureFocus();
+  };
+  stackHooks.closed = () => {
+    audio.play('ui.close');
+    ensureFocus();
+  };
 
   /** D-pad / arrows move focus; Confirm then clicks the focused control. */
   function navigate(i: Intent): boolean {
@@ -352,11 +372,13 @@
   export function padLost(seat: number) {
     if (!gs || gs.phase === 'gameOver' || gs.players[seat]?.bankrupt) return;
     waitingSeat = seat;
+    audio.play('ui.controller.lost', { seat });
     controller.setPaused(true);
   }
 
   export function padBack(seat: number) {
     if (waitingSeat === seat) {
+      audio.play('ui.controller.found', { seat });
       waitingSeat = null;
       controller.setPaused(paused);
     }
@@ -461,17 +483,24 @@
     }
     if (view.busy || view.card || view.moment) {
       if (i === 'confirm' || i === 'back') {
+        audio.play('ui.skip');
         controller.skip();
         return true;
       }
       return false;
     }
     const d = decide(gs, deviceSeat, i);
-    if (!d.allowed || d.seat === null) return true; // other players' controllers are read-only here
+    if (!d.allowed || d.seat === null) {
+      if (!d.allowed) audio.play('ui.error'); // other players' controllers are read-only here
+      return true;
+    }
     const seat = d.seat;
     // Full-screen screens (Inventory, Trade) see intents first: L/R, the trade's top face, and
     // Back inside the trade tray or on the proposer's paused pad.
-    if (screenIntent?.(i, deviceSeat)) return true;
+    if (screenIntent?.(i, deviceSeat)) {
+      if (i === 'cycleLeft' || i === 'cycleRight') audio.play('ui.tab');
+      return true;
+    }
     // Back closes the top menu one level; on a game decision (buy, auction, trade reply, debt)
     // it does nothing — those need the option chosen and confirmed (Stage 1 §1).
     if (i === 'back') {
@@ -542,7 +571,7 @@
     {:else if screen === 'menu'}
       {#if !benchOpen}
         <div class="layer" use:layer={{ kind: 'root' }}>
-          <MainMenu {saves} {oncontinue} onnew={() => (screen = 'setup')} onload={onloadsave} {onimport} onsettings={() => (menuSettings = true)} ontestboard={openTestBoard} />
+          <MainMenu {saves} {oncontinue} onnew={() => (screen = 'setup')} onload={onloadsave} {onimport} onsettings={() => (menuSettings = true)} ontestboard={openTestBoard} onsoundtest={() => (screen = 'soundtest')} />
         </div>
       {/if}
       {#if menuSettings}
@@ -550,6 +579,10 @@
           <PauseMenu gs={null} {settings} onsetting={setSetting} onresume={() => (menuSettings = false)} onforfeit={() => {}} onnewgame={() => {}} {onfullscreen} onbenchmark={() => openBench('menu')} />
         </div>
       {/if}
+    {:else if screen === 'soundtest'}
+      <div class="layer" use:layer={{ kind: 'menu', close: () => (screen = 'menu') }}>
+        <SoundTest onclose={() => (screen = 'menu')} />
+      </div>
     {:else}
       <div class="layer" use:layer={{ kind: 'menu', close: () => (screen = 'menu') }}>
         <Setup {onstart} {input} {pads} {presets} {boards} />

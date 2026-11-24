@@ -9,6 +9,7 @@
 //   root     — a screen with no parent (main menu); Back does nothing there.
 //
 // Plain TypeScript (no Svelte imports) so it is unit-testable in node; `layer` is a Svelte action.
+import { audio } from '../audio';
 
 export type LayerKind = 'menu' | 'dialog' | 'decision' | 'root';
 
@@ -58,8 +59,11 @@ export function layers(): readonly Layer[] {
  */
 export function back(): boolean {
   const t = topLayer();
+  // A game decision (buy, auction, debt) can't be backed out of: say so (audio Phase 0 §5).
+  if (t?.opts.kind === 'decision') audio.play('ui.denied');
   if (!t || !t.opts.close) return false;
   if (t.opts.kind !== 'menu' && t.opts.kind !== 'dialog') return false;
+  audio.play('ui.back');
   t.opts.close();
   return true;
 }
